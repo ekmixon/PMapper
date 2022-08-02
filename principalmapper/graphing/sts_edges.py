@@ -42,7 +42,7 @@ class STSEdgeChecker(EdgeChecker):
         logging.info('Generating Edges based on STS')
 
         for edge in result:
-            logger.info("Found new edge: {}".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}")
 
         return result
 

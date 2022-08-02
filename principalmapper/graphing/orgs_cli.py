@@ -245,24 +245,24 @@ def _update_accounts_with_ou_path_map(org_id: str, account_ou_map: dict, root_di
         potential_path = os.path.join(root_dir, account.account_id, 'metadata.json')
         if os.path.exists(os.path.join(potential_path)):
             try:
-                fd = open(potential_path, 'r')
-                metadata = json.load(fd)
-                new_org_data = {
-                    'org-id': org_id,
-                    'org-path': ou_path
-                }
-                logger.debug('Updating {} with org data: {}'.format(account.account_id, new_org_data))
-                metadata['org-id'] = org_id
-                metadata['org-path'] = ou_path
-                fd.close()
-
+                with open(potential_path, 'r') as fd:
+                    metadata = json.load(fd)
+                    new_org_data = {
+                        'org-id': org_id,
+                        'org-path': ou_path
+                    }
+                    logger.debug(f'Updating {account.account_id} with org data: {new_org_data}')
+                    metadata['org-id'] = org_id
+                    metadata['org-path'] = ou_path
                 fd = open(potential_path, 'w')
                 json.dump(metadata, fd, indent=4)
             except IOError as ex:
-                logger.debug('IOError when reading/writing metadata of {}: {}'.format(account.account_id, str(ex)))
+                logger.debug(
+                    f'IOError when reading/writing metadata of {account.account_id}: {str(ex)}'
+                )
+
                 continue
         else:
             logger.debug(
-                'Account {} of organization {} does not have a Graph. You will need to update the '
-                'organization data at a later point (`pmapper orgs update --org $ORG_ID`).'.format(account.account_id, org_id)
-            )  # warning gets thrown up by caller, no need to reiterate
+                f'Account {account.account_id} of organization {org_id} does not have a Graph. You will need to update the organization data at a later point (`pmapper orgs update --org $ORG_ID`).'
+            )

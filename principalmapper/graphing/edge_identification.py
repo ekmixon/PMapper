@@ -56,7 +56,7 @@ def obtain_edges(session: Optional[botocore.session.Session], checker_list: List
     against services passed in the checker_list param. """
     result = []
     logger.info('Initiating edge checks.')
-    logger.debug('Services being checked for edges: {}'.format(checker_list))
+    logger.debug(f'Services being checked for edges: {checker_list}')
     for check in checker_list:
         if check in checker_map:
             checker_obj = checker_map[check](session)

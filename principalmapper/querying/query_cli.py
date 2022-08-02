@@ -85,7 +85,7 @@ def process_arguments(parsed_args: Namespace):
         session = None
 
     graph = graph_actions.get_existing_graph(session, parsed_args.account)
-    logger.debug('Querying against graph {}'.format(graph.metadata['account_id']))
+    logger.debug(f"Querying against graph {graph.metadata['account_id']}")
 
     if parsed_args.with_resource_policy:
         resource_policy = query_utils.pull_cached_resource_policy_by_arn(
@@ -110,13 +110,12 @@ def process_arguments(parsed_args: Namespace):
             resource_policy = resource_policy.policy_doc
 
     if parsed_args.scps:
-        if 'org-id' in graph.metadata and 'org-path' in graph.metadata:
-            org_tree_path = os.path.join(get_storage_root(), graph.metadata['org-id'])
-            org_tree = OrganizationTree.create_from_dir(org_tree_path)
-            scps = query_orgs.produce_scp_list(graph, org_tree)
-        else:
+        if 'org-id' not in graph.metadata or 'org-path' not in graph.metadata:
             raise ValueError('Graph for account {} does not have an associated OrganizationTree mapped (need to run '
                              '`pmapper orgs create/update` to get that.')
+        org_tree_path = os.path.join(get_storage_root(), graph.metadata['org-id'])
+        org_tree = OrganizationTree.create_from_dir(org_tree_path)
+        scps = query_orgs.produce_scp_list(graph, org_tree)
     else:
         scps = None
 

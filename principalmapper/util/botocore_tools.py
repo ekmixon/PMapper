@@ -36,11 +36,7 @@ def get_session(profile_arg: Optional[str], stsargs: Optional[dict] = None) -> b
         result = botocore.session.get_session()
 
     # handles args for creating the STS client
-    if stsargs is None:
-        processed_stsargs = {}
-    else:
-        processed_stsargs = stsargs
-
+    processed_stsargs = {} if stsargs is None else stsargs
     stsclient = result.create_client('sts', **processed_stsargs)
     stsclient.get_caller_identity()  # raises error if it's not workable
     return result
@@ -68,16 +64,15 @@ def get_regions_to_search(session: botocore.session.Session, service_name: str, 
     result = []
 
     if region_allow_list is not None:
-        for element in base_list:
-            if element in region_allow_list:
-                result.append(element)
+        result.extend(element for element in base_list if element in region_allow_list)
     elif region_deny_list is not None:
-        for element in base_list:
-            if element not in region_deny_list:
-                result.append(element)
+        result.extend(
+            element for element in base_list if element not in region_deny_list
+        )
+
     else:
         result = base_list
 
-    logger.debug('Final list of regions for {}: {}'.format(service_name, result))
+    logger.debug(f'Final list of regions for {service_name}: {result}')
 
     return result

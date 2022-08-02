@@ -49,32 +49,41 @@ class AutoScalingEdgeChecker(EdgeChecker):
         autoscaling_clients = []
         if self.session is not None:
             as_regions = botocore_tools.get_regions_to_search(self.session, 'autoscaling', region_allow_list, region_deny_list)
-            for region in as_regions:
-                autoscaling_clients.append(self.session.create_client('autoscaling', region_name=region, **asargs))
+            autoscaling_clients.extend(
+                self.session.create_client(
+                    'autoscaling', region_name=region, **asargs
+                )
+                for region in as_regions
+            )
 
         launch_configs = []
         for as_client in autoscaling_clients:
-            logger.debug('Looking at region {}'.format(as_client.meta.region_name))
+            logger.debug(f'Looking at region {as_client.meta.region_name}')
             try:
                 lc_paginator = as_client.get_paginator('describe_launch_configurations')
                 for page in lc_paginator.paginate():
                     if 'LaunchConfigurations' in page:
-                        for launch_config in page['LaunchConfigurations']:
-                            if 'IamInstanceProfile' in launch_config and launch_config['IamInstanceProfile']:
-                                launch_configs.append({
-                                    'lc_arn': launch_config['LaunchConfigurationARN'],
-                                    'lc_iip': launch_config['IamInstanceProfile']
-                                })
+                        launch_configs.extend(
+                            {
+                                'lc_arn': launch_config['LaunchConfigurationARN'],
+                                'lc_iip': launch_config['IamInstanceProfile'],
+                            }
+                            for launch_config in page['LaunchConfigurations']
+                            if 'IamInstanceProfile' in launch_config
+                            and launch_config['IamInstanceProfile']
+                        )
 
             except ClientError as ex:
-                logger.warning('Unable to search region {} for launch configs. The region may be disabled, or the error may '
-                               'be caused by an authorization issue. Continuing.'.format(as_client.meta.region_name))
-                logger.debug('Exception details: {}'.format(ex))
+                logger.warning(
+                    f'Unable to search region {as_client.meta.region_name} for launch configs. The region may be disabled, or the error may be caused by an authorization issue. Continuing.'
+                )
+
+                logger.debug(f'Exception details: {ex}')
 
         result = generate_edges_locally(nodes, scps, launch_configs)
 
         for edge in result:
-            logger.info("Found new edge: {}".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}")
 
         return result
 
@@ -171,7 +180,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
                     reason = 'can create the EC2 Auto Scaling service role and an existing Launch Configuration to access'
 
                 if csr_mfa or casg_mfa:
-                    reason = '(MFA Required) ' + reason
+                    reason = f'(MFA Required) {reason}'
 
                 result.append(Edge(
                     node_source,
@@ -207,7 +216,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
                 else:
                     reason = 'can create the EC2 Auto Scaling service role and create a launch configuration to access'
                 if clc_mfa or pr_mfa:
-                    reason = '(MFA Required) ' + reason
+                    reason = f'(MFA Required) {reason}'
 
                 result.append(Edge(
                     node_source,

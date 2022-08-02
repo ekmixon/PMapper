@@ -45,17 +45,19 @@ def print_privesc_results(graph: Graph, nodes: List[Node], skip_admins: bool = F
             continue  # skip admins
 
         if node.is_admin:
-            print('{} is an administrative principal'.format(node.searchable_name()))
+            print(f'{node.searchable_name()} is an administrative principal')
             continue
 
         privesc, edge_list = can_privesc(graph, node)
         if privesc:
             end_of_list = edge_list[-1].destination
             # the node can access this admin node through the current edge list, print this info out
-            print('{} can escalate privileges by accessing the administrative principal {}:'.format(
-                node.searchable_name(), end_of_list.searchable_name()))
+            print(
+                f'{node.searchable_name()} can escalate privileges by accessing the administrative principal {end_of_list.searchable_name()}:'
+            )
+
             for edge in edge_list:
-                print('   {}'.format(edge.describe_edge()))
+                print(f'   {edge.describe_edge()}')
             print()
 
 
@@ -68,17 +70,19 @@ def write_privesc_results(graph: Graph, nodes: List[Node], skip_admins: bool, ou
             continue  # skip admins
 
         if node.is_admin:
-            output.write('{} is an administrative principal\n'.format(node.searchable_name()))
+            output.write(f'{node.searchable_name()} is an administrative principal\n')
             continue
 
         privesc, edge_list = can_privesc(graph, node)
         if privesc:
             end_of_list = edge_list[-1].destination
             # the node can access this admin node through the current edge list, print this info out
-            output.write('{} can escalate privileges by accessing the administrative principal {}:\n'.format(
-                node.searchable_name(), end_of_list.searchable_name()))
+            output.write(
+                f'{node.searchable_name()} can escalate privileges by accessing the administrative principal {end_of_list.searchable_name()}:\n'
+            )
+
             for edge in edge_list:
-                output.write('   {}\n'.format(edge.describe_edge()))
+                output.write(f'   {edge.describe_edge()}\n')
 
 
 def can_privesc(graph: Graph, node: Node) -> (bool, List[Edge]):

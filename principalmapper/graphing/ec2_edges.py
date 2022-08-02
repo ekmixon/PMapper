@@ -43,7 +43,7 @@ class EC2EdgeChecker(EdgeChecker):
         result = generate_edges_locally(nodes, scps)
 
         for edge in result:
-            logger.info("Found new edge: {}".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}")
 
         return result
 
@@ -134,7 +134,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
                 else:
                     reason = 'can use EC2 to run an instance with a newly created instance profile to access'
                 if mfa_needed:
-                    reason = '(MFA required) ' + reason
+                    reason = f'(MFA required) {reason}'
 
                 new_edge = Edge(
                     node_source,
@@ -173,7 +173,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
                              'access'
 
                 if mfa_res or mfa_needed:
-                    reason = '(MFA required) ' + reason
+                    reason = f'(MFA required) {reason}'
 
                 if attach_ip_res:
                     new_edge = Edge(

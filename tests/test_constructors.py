@@ -44,4 +44,4 @@ class ConstructorTest(unittest.TestCase):
                  group_memberships=[], trust_policy=None, instance_profile=None, num_access_keys=0,
                  active_password=False, is_admin=False, permissions_boundary=None, has_mfa=False, tags={})
         except Exception as ex:
-            self.fail('Unexpected error: ' + str(ex))
+            self.fail(f'Unexpected error: {str(ex)}')

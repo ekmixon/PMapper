@@ -27,16 +27,16 @@ def handle_preset_query(graph: Graph, tokens: List[str], skip_admins: bool = Fal
     tag_name_target = tokens[2]
     clusters = generate_clusters(graph, tag_name_target)
 
-    print('# Clusters identified on key {}'.format(tag_name_target))
+    print(f'# Clusters identified on key {tag_name_target}')
     for k in clusters.keys():
         if k is None:
             continue
-        print('{}:'.format(k))
+        print(f'{k}:')
         for n in clusters[k]:
-            print('   {}'.format(n.searchable_name()))
+            print(f'   {n.searchable_name()}')
 
     print()
-    print('# Boundaries crossed on key {}'.format(tag_name_target))
+    print(f'# Boundaries crossed on key {tag_name_target}')
     for source in clusters.keys():
         if source is None:
             continue
@@ -49,11 +49,12 @@ def handle_preset_query(graph: Graph, tokens: List[str], skip_admins: bool = Fal
                 for dst_node in clusters[destination]:
                     connected, path = is_connected(graph, src_node, dst_node)
                     if connected:
-                        print('{} can cross boundaries and access {}'.format(
-                            src_node.searchable_name(), dst_node.searchable_name()
-                        ))
+                        print(
+                            f'{src_node.searchable_name()} can cross boundaries and access {dst_node.searchable_name()}'
+                        )
+
                         for edge in path:
-                            print('   {}'.format(edge.describe_edge()))
+                            print(f'   {edge.describe_edge()}')
 
 
 def generate_clusters(graph: Graph, tag_name_target: str) -> Dict[str, List[Node]]:
@@ -61,11 +62,7 @@ def generate_clusters(graph: Graph, tag_name_target: str) -> Dict[str, List[Node
 
     result = {}
     for node in graph.nodes:
-        if tag_name_target in node.tags:
-            value = node.tags[tag_name_target]
-        else:
-            value = None
-
+        value = node.tags[tag_name_target] if tag_name_target in node.tags else None
         if value not in result:
             result[value] = [node]
         else:

@@ -52,11 +52,9 @@ def query_response(graph: Graph, query: str, skip_admins: bool = False, resource
                    resource_owner: Optional[str] = None, include_unauthorized: bool = False,
                    session_policy: Optional[dict] = None, scps: Optional[List[List[dict]]] = None) -> None:
     """Interprets, executes, and outputs the results to a query."""
-    result = []
-
     # Parse
     tokens = re.split(r'\s+', query, flags=re.UNICODE)
-    logger.debug('Query tokens: {}'.format(tokens))
+    logger.debug(f'Query tokens: {tokens}')
     if len(tokens) < 2:
         _print_query_help()
         return
@@ -93,12 +91,11 @@ def query_response(graph: Graph, query: str, skip_admins: bool = False, resource
                     raise ValueError('Format for condition args not matched: <key>=<value>')
                 key = components[0]
                 value = '='.join(components[1:])
-                condition.update({key: value})
-            logger.debug('Conditions: {}'.format(condition))
+                condition[key] = value
+            logger.debug(f'Conditions: {condition}')
         else:
             condition = {}
 
-    # second form: who can do X with Y when Z and A and B and C
     elif tokens[0] == 'who' and tokens[1] == 'can' and tokens[2] == 'do':  # who can do X
         nodes.extend(graph.nodes)
         action = tokens[3]
@@ -127,8 +124,8 @@ def query_response(graph: Graph, query: str, skip_admins: bool = False, resource
                     raise ValueError('Format for condition args not matched: <key>=<value>')
                 key = components[0]
                 value = '='.join(components[1:])
-                condition.update({key: value})
-            logger.debug('Conditions: {}'.format(condition))
+                condition[key] = value
+            logger.debug(f'Conditions: {condition}')
         else:
             condition = {}
 
@@ -141,34 +138,34 @@ def query_response(graph: Graph, query: str, skip_admins: bool = False, resource
         return
 
     # pull resource owner from arg or ARN
-    if resource_policy is not None:
-        if resource_owner is None:
-            arn_owner = arns.get_account_id(resource)
-            if '*' in arn_owner or '?' in arn_owner:
-                raise ValueError('Resource arg in query cannot have wildcards (? and *) unless setting '
-                                 '--resource-owner')
-            if arn_owner == '':
-                raise ValueError('Param --resource-owner must be set if resource param does not include the '
-                                 'account ID.')
+    if resource_policy is not None and resource_owner is None:
+        arn_owner = arns.get_account_id(resource)
+        if '*' in arn_owner or '?' in arn_owner:
+            raise ValueError('Resource arg in query cannot have wildcards (? and *) unless setting '
+                             '--resource-owner')
+        if arn_owner == '':
+            raise ValueError('Param --resource-owner must be set if resource param does not include the '
+                             'account ID.')
 
-    # Execute
-    for node in nodes:
-        if not skip_admins or not node.is_admin:
-            result.append((
-                search_authorization_full(
-                    graph,
-                    node,
-                    action,
-                    resource,
-                    condition,
-                    resource_policy,
-                    resource_owner,
-                    scps,
-                    session_policy
-                ),
+    result = [
+        (
+            search_authorization_full(
+                graph,
+                node,
                 action,
-                resource
-            ))
+                resource,
+                condition,
+                resource_policy,
+                resource_owner,
+                scps,
+                session_policy,
+            ),
+            action,
+            resource,
+        )
+        for node in nodes
+        if not skip_admins or not node.is_admin
+    ]
 
     # Print
     for query_result, action, resource in result:
@@ -222,66 +219,65 @@ def argquery(graph: Graph, principal_param: Optional[str], action_param: Optiona
              resource_policy: dict = None, resource_owner: str = None, include_unauthorized: bool = False,
              session_policy: Optional[dict] = None, scps: Optional[List[List[dict]]] = None) -> None:
     """Splits between running a normal argquery and the presets."""
-    if preset_param is not None:
-        if preset_param == 'privesc':
-            # Validate params
-            if action_param is not None:
-                raise ValueError('For the privesc preset query, the --action parameter should not be set.')
-            if resource_param is not None and resource_param != '*':
-                raise ValueError('For the privesc preset query, the --resource parameter should not be set or set to \'*\'.')
-
-            nodes = []
-            if principal_param is None or principal_param == '*':
-                nodes.extend(graph.nodes)
-            else:
-                nodes.append(graph.get_node_by_searchable_name(principal_param))
-
-            privesc.print_privesc_results(graph, nodes, skip_admins)
-        elif preset_param == 'connected':
-            # Validate params
-            if action_param is not None:
-                raise ValueError('For the privesc preset query, the --action parameter should not be set.')
-
-            source_nodes = []
-            dest_nodes = []
-            if principal_param is None or principal_param == '*':
-                source_nodes.extend(graph.nodes)
-            else:
-                source_nodes.append(graph.get_node_by_searchable_name(principal_param))
-
-            if resource_param is None or resource_param == '*':
-                dest_nodes.extend(graph.nodes)
-            else:
-                dest_nodes.append(graph.get_node_by_searchable_name(resource_param))
-
-            connected.write_connected_results(graph, source_nodes, dest_nodes, skip_admins)
-        elif preset_param == 'clusters':
-            # validate params
-            if action_param is not None:
-                raise ValueError('For the clusters preset query, the --action parameter should not be set.')
-
-            if resource_param is None:
-                raise ValueError('For the clusters preset query, the --resource parameter must be set.')
-
-            clusters.handle_preset_query(graph, ['', '', resource_param], skip_admins)
-        elif preset_param == 'endgame':
-            # validate params
-            if action_param is not None:
-                raise ValueError('For the clusters preset query, the --action parameter should not be set.')
-
-            if resource_param is None:
-                raise ValueError('For the endgame preset query, the --resource parameter must be set.')
-
-            endgame.handle_preset_query(graph, ['', '', resource_param], skip_admins)
-        elif preset_param == 'serviceaccess':
-            serviceaccess.handle_preset_query(graph, [], skip_admins)
-        else:
-            raise ValueError('Parameter for "preset" is not valid. Expected values: "privesc", "connected", '
-                             '"clusters", "endgame", or "serviceaccess".')
-
-    else:
+    if preset_param is None:
         argquery_response(graph, principal_param, action_param, resource_param, condition_param, skip_admins,
                           resource_policy, resource_owner, include_unauthorized, session_policy, scps)
+
+    elif preset_param == 'privesc':
+        # Validate params
+        if action_param is not None:
+            raise ValueError('For the privesc preset query, the --action parameter should not be set.')
+        if resource_param is not None and resource_param != '*':
+            raise ValueError('For the privesc preset query, the --resource parameter should not be set or set to \'*\'.')
+
+        nodes = []
+        if principal_param is None or principal_param == '*':
+            nodes.extend(graph.nodes)
+        else:
+            nodes.append(graph.get_node_by_searchable_name(principal_param))
+
+        privesc.print_privesc_results(graph, nodes, skip_admins)
+    elif preset_param == 'connected':
+        # Validate params
+        if action_param is not None:
+            raise ValueError('For the privesc preset query, the --action parameter should not be set.')
+
+        source_nodes = []
+        dest_nodes = []
+        if principal_param is None or principal_param == '*':
+            source_nodes.extend(graph.nodes)
+        else:
+            source_nodes.append(graph.get_node_by_searchable_name(principal_param))
+
+        if resource_param is None or resource_param == '*':
+            dest_nodes.extend(graph.nodes)
+        else:
+            dest_nodes.append(graph.get_node_by_searchable_name(resource_param))
+
+        connected.write_connected_results(graph, source_nodes, dest_nodes, skip_admins)
+    elif preset_param == 'clusters':
+        # validate params
+        if action_param is not None:
+            raise ValueError('For the clusters preset query, the --action parameter should not be set.')
+
+        if resource_param is None:
+            raise ValueError('For the clusters preset query, the --resource parameter must be set.')
+
+        clusters.handle_preset_query(graph, ['', '', resource_param], skip_admins)
+    elif preset_param == 'endgame':
+        # validate params
+        if action_param is not None:
+            raise ValueError('For the clusters preset query, the --action parameter should not be set.')
+
+        if resource_param is None:
+            raise ValueError('For the endgame preset query, the --resource parameter must be set.')
+
+        endgame.handle_preset_query(graph, ['', '', resource_param], skip_admins)
+    elif preset_param == 'serviceaccess':
+        serviceaccess.handle_preset_query(graph, [], skip_admins)
+    else:
+        raise ValueError('Parameter for "preset" is not valid. Expected values: "privesc", "connected", '
+                         '"clusters", "endgame", or "serviceaccess".')
 
 
 def argquery_response(graph: Graph, principal_param: Optional[str], action_param: str, resource_param: Optional[str],
@@ -289,8 +285,6 @@ def argquery_response(graph: Graph, principal_param: Optional[str], action_param
                       resource_owner: str = None, include_unauthorized: bool = False,
                       session_policy: Optional[dict] = None, scps: Optional[List[List[dict]]] = None) -> None:
     """Prints the output of a non-preset argquery"""
-    result = []
-
     if resource_param is None:
         resource_param = '*'
 
@@ -310,21 +304,20 @@ def argquery_response(graph: Graph, principal_param: Optional[str], action_param
         else:
             nodes = [target_node]
 
-    # go through all nodes
-    for node in nodes:
-        result.append(
-            search_authorization_full(
-                graph,
-                node,
-                action_param,
-                resource_param,
-                condition_param,
-                resource_policy,
-                resource_owner,
-                scps,
-                session_policy
-            )
+    result = [
+        search_authorization_full(
+            graph,
+            node,
+            action_param,
+            resource_param,
+            condition_param,
+            resource_policy,
+            resource_owner,
+            scps,
+            session_policy,
         )
+        for node in nodes
+    ]
 
     for query_result in result:
         if query_result.allowed or include_unauthorized:

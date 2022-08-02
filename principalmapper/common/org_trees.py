@@ -32,10 +32,7 @@ class OrganizationAccount(object):
     def __init__(self, account_id: str, scps: List[Policy], tags: Optional[dict]):
         self.account_id = account_id
         self.scps = scps
-        if tags is None:
-            self.tags = {}
-        else:
-            self.tags = tags
+        self.tags = {} if tags is None else tags
 
     def as_dictionary(self) -> dict:
         """Returns a dictionary representation of this OrganizationAccount object. Used for serialization to disk. We
@@ -64,10 +61,7 @@ class OrganizationNode(object):
         self.accounts = accounts
         self.child_nodes = child_nodes  # type: List[OrganizationNode]
         self.scps = scps
-        if tags is None:
-            self.tags = {}
-        else:
-            self.tags = tags
+        self.tags = {} if tags is None else tags
 
     def as_dictionary(self) -> dict:
         """Returns a dictionary representation of this OrganizationNode object. Used for serialization to disk. We
@@ -185,8 +179,8 @@ class OrganizationTree(object):
             org_dictrepr['org_id'],
             org_dictrepr['management_account_id'],
             root_ous,
-            [x for x in policies.values()],
+            list(policies.values()),
             org_dictrepr['accounts'],
             org_dictrepr['edge_list'],
-            metadata_obj
+            metadata_obj,
         )

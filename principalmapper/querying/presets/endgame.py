@@ -60,7 +60,7 @@ def handle_preset_query(graph: Graph, tokens: List[str], skip_admins: bool = Fal
     endgame_map = compose_endgame_map(graph, tokens[2], skip_admins)
     for policy, nodes in endgame_map.items():
         print(policy.arn)
-        print('  {}'.format([x.searchable_name() for x in nodes]))
+        print(f'  {[x.searchable_name() for x in nodes]}')
 
 
 def compose_endgame_map(graph: Graph, service_to_include: str = '*', skip_admins: bool = False) -> Dict[Policy, List[Node]]:
@@ -71,44 +71,46 @@ def compose_endgame_map(graph: Graph, service_to_include: str = '*', skip_admins
 
     for policy in graph.policies:
         for service, definition in _service_resource_exposure_map.items():
-            if service_to_include == '*' or ':{}:'.format(service_to_include) in policy.arn:
-                if definition['pattern'].match(policy.arn) is not None:
-                    result[policy] = []
+            if (
+                service_to_include == '*'
+                or f':{service_to_include}:' in policy.arn
+            ) and definition['pattern'].match(policy.arn) is not None:
+                result[policy] = []
 
-                    for node in graph.nodes:
-                        node_confirmed = False
+                for node in graph.nodes:
+                    node_confirmed = False
 
-                        if 'conditions' not in node.cache:
-                            node.cache['conditions'] = query_interface._infer_condition_keys(node, CaseInsensitiveDict())
+                    if 'conditions' not in node.cache:
+                        node.cache['conditions'] = query_interface._infer_condition_keys(node, CaseInsensitiveDict())
 
-                        if (not skip_admins) or (not node.is_admin):
-                            for action in definition['actions']:
-                                if node_confirmed:
-                                    continue
+                    if (not skip_admins) or (not node.is_admin):
+                        for action in definition['actions']:
+                            if node_confirmed:
+                                continue
 
+                            query_result = query_interface.local_check_authorization_full(
+                                node, action, policy.arn, node.cache['conditions'], policy.policy_doc, graph.metadata['account_id'],
+                                None, None
+                            )
+
+                            if query_result:
+                                node_confirmed = True
+
+                            elif node.has_mfa:
+                                conditions_copy = copy.deepcopy(node.cache['conditions'])
+                                conditions_copy.update({
+                                    'aws:MultiFactorAuthAge': '1',
+                                    'aws:MultiFactorAuthPresent': 'true'
+                                })
                                 query_result = query_interface.local_check_authorization_full(
-                                    node, action, policy.arn, node.cache['conditions'], policy.policy_doc, graph.metadata['account_id'],
+                                    node, action, policy.arn, conditions_copy, policy.policy_doc,
+                                    graph.metadata['account_id'],
                                     None, None
                                 )
-
                                 if query_result:
                                     node_confirmed = True
 
-                                elif node.has_mfa:
-                                    conditions_copy = copy.deepcopy(node.cache['conditions'])
-                                    conditions_copy.update({
-                                        'aws:MultiFactorAuthAge': '1',
-                                        'aws:MultiFactorAuthPresent': 'true'
-                                    })
-                                    query_result = query_interface.local_check_authorization_full(
-                                        node, action, policy.arn, conditions_copy, policy.policy_doc,
-                                        graph.metadata['account_id'],
-                                        None, None
-                                    )
-                                    if query_result:
-                                        node_confirmed = True
-
-                        if node_confirmed:
-                            result[policy].append(node)
+                    if node_confirmed:
+                        result[policy].append(node)
 
     return result

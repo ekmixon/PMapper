@@ -29,12 +29,13 @@ def write_standard_graphviz(graph: Graph, filepath: str, file_format: str, with_
     # Load graph data into pydot
     pydg = pydot.Dot(
         graph_type='digraph',
-        graph_name='Principal Mapper Visualization: {}'.format(graph.metadata['account_id']),
+        graph_name=f"Principal Mapper Visualization: {graph.metadata['account_id']}",
         overlap='scale',
         layout='neato',
         concentrate='true',
-        splines='true'
+        splines='true',
     )
+
     pyd_nd = {}
 
     # Draw standard nodes and edges: users/roles

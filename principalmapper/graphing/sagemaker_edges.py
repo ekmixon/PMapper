@@ -43,7 +43,7 @@ class SageMakerEdgeChecker(EdgeChecker):
         result = generate_edges_locally(nodes, scps)
 
         for edge in result:
-            logger.info("Found new edge: {}".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}")
 
         return result
 

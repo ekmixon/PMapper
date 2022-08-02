@@ -50,58 +50,58 @@ class CodeBuildEdgeChecker(EdgeChecker):
         codebuild_clients = []
         if self.session is not None:
             cf_regions = botocore_tools.get_regions_to_search(self.session, 'codebuild', region_allow_list, region_deny_list)
-            for region in cf_regions:
-                codebuild_clients.append(self.session.create_client('codebuild', region_name=region, **cbargs))
+            codebuild_clients.extend(
+                self.session.create_client(
+                    'codebuild', region_name=region, **cbargs
+                )
+                for region in cf_regions
+            )
 
         codebuild_projects = []
         for cb_client in codebuild_clients:
-            logger.debug('Looking at region {}'.format(cb_client.meta.region_name))
+            logger.debug(f'Looking at region {cb_client.meta.region_name}')
             region_project_list_list = []
             try:
                 # list the projects first, 50 at a time
                 paginator = cb_client.get_paginator('list_projects')
-                for page in paginator.paginate(PaginationConfig={'MaxItems': 50}):
-                    if 'projects' in page and len(page['projects']) > 0:
-                        region_project_list_list.append(page['projects'])
+                region_project_list_list.extend(
+                    page['projects']
+                    for page in paginator.paginate(
+                        PaginationConfig={'MaxItems': 50}
+                    )
+                    if 'projects' in page and len(page['projects']) > 0
+                )
 
                 for region_project_list in region_project_list_list:
                     batch_project_data = cb_client.batch_get_projects(names=region_project_list)  # no pagination
                     if 'projects' in batch_project_data:
-                        for project_data in batch_project_data['projects']:
-                            if 'serviceRole' in project_data:
-                                codebuild_projects.append({
-                                    'project_arn': project_data['arn'],
-                                    'project_role': project_data['serviceRole'],
-                                    'project_tags': project_data['tags']
-                                })
+                        codebuild_projects.extend(
+                            {
+                                'project_arn': project_data['arn'],
+                                'project_role': project_data['serviceRole'],
+                                'project_tags': project_data['tags'],
+                            }
+                            for project_data in batch_project_data['projects']
+                            if 'serviceRole' in project_data
+                        )
 
             except ClientError as ex:
-                logger.warning('Unable to search region {} for projects. The region may be disabled, or the error may '
-                               'be caused by an authorization issue. Continuing.'.format(cb_client.meta.region_name))
-                logger.debug('Exception details: {}'.format(ex))
+                logger.warning(
+                    f'Unable to search region {cb_client.meta.region_name} for projects. The region may be disabled, or the error may be caused by an authorization issue. Continuing.'
+                )
+
+                logger.debug(f'Exception details: {ex}')
 
         result = generate_edges_locally(nodes, scps, codebuild_projects)
 
         for edge in result:
-            logger.info("Found new edge: {}".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}")
 
         return result
 
 
 def _gen_resource_tag_conditions(tag_list: List[dict]):
-    condition_result = {
-        # 'aws:TagKeys': []
-    }
-    for tag in tag_list:
-        condition_result.update({
-            'aws:ResourceTag/{}'.format(tag['key']): tag['value']
-        })
-        # TODO: make sure we're handling RequestTag and TagKeys correctly
-        # condition_result.update({
-        #     'aws:RequestTag/{}'.format(tag['Key']): tag['Value']
-        # })
-        # condition_result['aws:TagKeys'].append(tag['Key'])
-    return condition_result
+    return {f"aws:ResourceTag/{tag['key']}": tag['value'] for tag in tag_list}
 
 
 def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] = None, codebuild_projects: Optional[List[dict]] = None) -> List[Edge]:
@@ -123,11 +123,9 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
 
     result = []
 
+    codebuild_map = {}
     # we wanna create a role -> [{proj_arn: <>, proj_tags: <>}] map to make eventual lookups faster
-    if codebuild_projects is None:
-        codebuild_map = {}
-    else:
-        codebuild_map = {}  # type: Dict[str, List[dict]]
+    if codebuild_projects is not None:
         for project in codebuild_projects:
             if project['project_role'] not in codebuild_map:
                 codebuild_map[project['project_role']] = [{'proj_arn': project['project_arn'], 'proj_tags': project['project_tags']}]

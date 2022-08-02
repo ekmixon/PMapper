@@ -53,9 +53,12 @@ def print_connected_results(graph: Graph, source_nodes: List[Node], dest_nodes: 
             connection_result, path = is_connected(graph, snode, dnode)
             if connection_result:
                 # print the data
-                print('{} is able to access {}:'.format(snode.searchable_name(), dnode.searchable_name()))
+                print(
+                    f'{snode.searchable_name()} is able to access {dnode.searchable_name()}:'
+                )
+
                 for edge in path:
-                    print('   {}'.format(edge.describe_edge()))
+                    print(f'   {edge.describe_edge()}')
                 print()
 
 
@@ -70,9 +73,12 @@ def write_connected_results(graph: Graph, source_nodes: List[Node], dest_nodes: 
             connection_result, path = is_connected(graph, snode, dnode)
             if connection_result:
                 # print the data
-                output.write('{} is able to access {}:\n'.format(snode.searchable_name(), dnode.searchable_name()))
+                output.write(
+                    f'{snode.searchable_name()} is able to access {dnode.searchable_name()}:\n'
+                )
+
                 for edge in path:
-                    output.write('   {}\n'.format(edge.describe_edge()))
+                    output.write(f'   {edge.describe_edge()}\n')
 
 
 def is_connected(graph: Graph, source_node: Node, dest_node: Node) -> (bool, List[Edge]):

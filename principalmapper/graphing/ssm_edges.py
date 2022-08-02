@@ -42,7 +42,7 @@ class SSMEdgeChecker(EdgeChecker):
         result = generate_edges_locally(nodes, scps)
 
         for edge in result:
-            logger.info("Found new edge: {}".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}")
 
         return result
 
@@ -96,7 +96,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
             if cmd_auth_res:
                 reason = 'can call ssm:SendCommand to access an EC2 instance with access to'
                 if mfa_res_1:
-                    reason = '(Requires MFA) ' + reason
+                    reason = f'(Requires MFA) {reason}'
                 result.append(Edge(node_source, node_destination, reason, 'SSM'))
 
             sesh_auth_res, mfa_res_2 = query_interface.local_check_authorization_handling_mfa(
@@ -109,7 +109,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
             if sesh_auth_res:
                 reason = 'can call ssm:StartSession to access an EC2 instance with access to'
                 if mfa_res_2:
-                    reason = '(Requires MFA) ' + reason
+                    reason = f'(Requires MFA) {reason}'
                 result.append(Edge(node_source, node_destination, reason, 'SSM'))
 
     return result

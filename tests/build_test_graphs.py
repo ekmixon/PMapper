@@ -56,40 +56,174 @@ def build_playground_graph() -> Graph:
     other_acct_trusted_policy_doc = _make_trust_document({'AWS': '999999999999'})
 
     # nodes to add
-    nodes = []
-    # Regular admin user
-    nodes.append(Node(common_iam_prefix + 'user/admin', 'AIDA00000000000000000', [admin_policy], [], None, None, 1, True, True, None, False, None))
+    nodes = [
+        Node(
+            f'{common_iam_prefix}user/admin',
+            'AIDA00000000000000000',
+            [admin_policy],
+            [],
+            None,
+            None,
+            1,
+            True,
+            True,
+            None,
+            False,
+            None,
+        )
+    ]
 
     # Regular ec2 role
-    nodes.append(Node(common_iam_prefix + 'role/ec2_ssm_role', 'AIDA00000000000000001', [ec2_for_ssm_policy], [],
-                      ec2_trusted_policy_doc, [common_iam_prefix + 'instance-profile/ec2_ssm_role'], 0, False, False, None, False, None))
+    nodes.append(
+        Node(
+            f'{common_iam_prefix}role/ec2_ssm_role',
+            'AIDA00000000000000001',
+            [ec2_for_ssm_policy],
+            [],
+            ec2_trusted_policy_doc,
+            [f'{common_iam_prefix}instance-profile/ec2_ssm_role'],
+            0,
+            False,
+            False,
+            None,
+            False,
+            None,
+        )
+    )
+
 
     # ec2 role with admin
-    nodes.append(Node(common_iam_prefix + 'role/ec2_admin_role', 'AIDA00000000000000002', [ec2_for_ssm_policy], [], ec2_trusted_policy_doc,
-                      [common_iam_prefix + 'instance-profile/ec2_admin_role'], 0, False, True, None, False, None))
+    nodes.append(
+        Node(
+            f'{common_iam_prefix}role/ec2_admin_role',
+            'AIDA00000000000000002',
+            [ec2_for_ssm_policy],
+            [],
+            ec2_trusted_policy_doc,
+            [f'{common_iam_prefix}instance-profile/ec2_admin_role'],
+            0,
+            False,
+            True,
+            None,
+            False,
+            None,
+        )
+    )
+
 
     # assumable role with s3 access
-    nodes.append(Node(common_iam_prefix + 'role/s3_access_role', 'AIDA00000000000000003', [s3_full_access_policy], [], root_trusted_policy_doc,
-                      None, 0, False, False, None, False, None))
+    nodes.append(
+        Node(
+            f'{common_iam_prefix}role/s3_access_role',
+            'AIDA00000000000000003',
+            [s3_full_access_policy],
+            [],
+            root_trusted_policy_doc,
+            None,
+            0,
+            False,
+            False,
+            None,
+            False,
+            None,
+        )
+    )
+
 
     # second assumable role with s3 access with alternative trust policy
-    nodes.append(Node(common_iam_prefix + 'role/s3_access_role_alt', 'AIDA00000000000000004', [s3_full_access_policy], [],
-                 alt_root_trusted_policy_doc, None, 0, False, False, None, False, None))
+    nodes.append(
+        Node(
+            f'{common_iam_prefix}role/s3_access_role_alt',
+            'AIDA00000000000000004',
+            [s3_full_access_policy],
+            [],
+            alt_root_trusted_policy_doc,
+            None,
+            0,
+            False,
+            False,
+            None,
+            False,
+            None,
+        )
+    )
+
 
     # externally assumable role with s3 access
-    nodes.append(Node(common_iam_prefix + 'role/external_s3_access_role', 'AIDA00000000000000005', [s3_full_access_policy], [],
-                      other_acct_trusted_policy_doc, None, 0, False, False, None, False, None))
+    nodes.append(
+        Node(
+            f'{common_iam_prefix}role/external_s3_access_role',
+            'AIDA00000000000000005',
+            [s3_full_access_policy],
+            [],
+            other_acct_trusted_policy_doc,
+            None,
+            0,
+            False,
+            False,
+            None,
+            False,
+            None,
+        )
+    )
+
 
     # jump user with access to sts:AssumeRole
-    nodes.append(Node(common_iam_prefix + 'user/jumpuser', 'AIDA00000000000000006', [jump_policy], [], None, None, 1, True, False, None, False, None))
+    nodes.append(
+        Node(
+            f'{common_iam_prefix}user/jumpuser',
+            'AIDA00000000000000006',
+            [jump_policy],
+            [],
+            None,
+            None,
+            1,
+            True,
+            False,
+            None,
+            False,
+            None,
+        )
+    )
+
 
     # user with S3 access, path in user's ARN
-    nodes.append(Node(common_iam_prefix + 'user/somepath/some_other_jumpuser', 'AIDA00000000000000007', [jump_policy],
-                      [], None, None, 1, True, False, None, False, None))
+    nodes.append(
+        Node(
+            f'{common_iam_prefix}user/somepath/some_other_jumpuser',
+            'AIDA00000000000000007',
+            [jump_policy],
+            [],
+            None,
+            None,
+            1,
+            True,
+            False,
+            None,
+            False,
+            None,
+        )
+    )
+
 
     # role with S3 access, path in role's ARN
-    nodes.append(Node(common_iam_prefix + 'role/somepath/somerole', 'AIDA00000000000000008', [s3_full_access_policy],
-                      [], alt_root_trusted_policy_doc, None, 0, False, False, None, False, None))
+    nodes.append(
+        Node(
+            f'{common_iam_prefix}role/somepath/somerole',
+            'AIDA00000000000000008',
+            [s3_full_access_policy],
+            [],
+            alt_root_trusted_policy_doc,
+            None,
+            0,
+            False,
+            False,
+            None,
+            False,
+            None,
+        )
+    )
+
 
     # edges to add
     edges = obtain_edges(None, checker_map.keys(), nodes)
@@ -256,10 +390,15 @@ def _make_trust_document(principal_element: dict) -> dict:
 
 def _build_user_with_policy(policy_dict, policy_name='single_user_policy', user_name='asdf', number='0') -> Node:
     """Helper function: builds an IAM User with a given input policy."""
-    policy = Policy('arn:aws:iam::000000000000:policy/{}'.format(policy_name), policy_name, policy_dict)
-    result = Node(
-        'arn:aws:iam::000000000000:user/{}'.format(user_name),
-        'AIDA0000000000000000{}'.format(number),
+    policy = Policy(
+        f'arn:aws:iam::000000000000:policy/{policy_name}',
+        policy_name,
+        policy_dict,
+    )
+
+    return Node(
+        f'arn:aws:iam::000000000000:user/{user_name}',
+        f'AIDA0000000000000000{number}',
         [policy],
         [],
         None,
@@ -269,6 +408,5 @@ def _build_user_with_policy(policy_dict, policy_name='single_user_policy', user_
         False,
         None,
         False,
-        None
+        None,
     )
-    return result

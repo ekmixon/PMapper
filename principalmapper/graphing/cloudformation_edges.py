@@ -51,30 +51,44 @@ class CloudFormationEdgeChecker(EdgeChecker):
         cloudformation_clients = []
         if self.session is not None:
             cf_regions = botocore_tools.get_regions_to_search(self.session, 'cloudformation', region_allow_list, region_deny_list)
-            for region in cf_regions:
-                cloudformation_clients.append(self.session.create_client('cloudformation', region_name=region, **cfargs))
+            cloudformation_clients.extend(
+                self.session.create_client(
+                    'cloudformation', region_name=region, **cfargs
+                )
+                for region in cf_regions
+            )
 
         # grab existing cloudformation stacks
         stack_list = []
         for cf_client in cloudformation_clients:
-            logger.debug('Looking at region {}'.format(cf_client.meta.region_name))
+            logger.debug(f'Looking at region {cf_client.meta.region_name}')
             try:
                 paginator = cf_client.get_paginator('describe_stacks')
                 for page in paginator.paginate():
-                    for stack in page['Stacks']:
-                        if stack['StackStatus'] not in ['CREATE_FAILED', 'DELETE_COMPLETE', 'DELETE_FAILED',
-                                                        'DELETE_IN_PROGRESS']:  # ignore unusable stacks
-                            stack_list.append(stack)
+                    stack_list.extend(
+                        stack
+                        for stack in page['Stacks']
+                        if stack['StackStatus']
+                        not in [
+                            'CREATE_FAILED',
+                            'DELETE_COMPLETE',
+                            'DELETE_FAILED',
+                            'DELETE_IN_PROGRESS',
+                        ]
+                    )
+
             except ClientError as ex:
-                logger.warning('Unable to search region {} for stacks. The region may be disabled, or the error may '
-                               'be caused by an authorization issue. Continuing.'.format(cf_client.meta.region_name))
-                logger.debug('Exception details: {}'.format(ex))
+                logger.warning(
+                    f'Unable to search region {cf_client.meta.region_name} for stacks. The region may be disabled, or the error may be caused by an authorization issue. Continuing.'
+                )
+
+                logger.debug(f'Exception details: {ex}')
 
         logger.info('Generating Edges based on data from CloudFormation.')
         result = generate_edges_locally(nodes, stack_list, scps)
 
         for edge in result:
-            logger.info("Found new edge: {}".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}")
         return result
 
 
@@ -136,15 +150,16 @@ def generate_edges_locally(nodes: List[Node], stack_list: List[dict], scps: Opti
                 if can_create:
                     reason = 'can create a stack in CloudFormation to access'
                     if need_mfa_passrole or need_mfa_create:
-                        reason = '(MFA required) ' + reason
+                        reason = f'(MFA required) {reason}'
 
                     result.append(Edge(node_source, node_destination, reason, 'Cloudformation'))
 
-            relevant_stacks = []  # we'll reuse this for *ChangeSet
-            for stack in stack_list:
-                if 'RoleARN' in stack:
-                    if stack['RoleARN'] == node_destination.arn:
-                        relevant_stacks.append(stack)
+            relevant_stacks = [
+                stack
+                for stack in stack_list
+                if 'RoleARN' in stack
+                and stack['RoleARN'] == node_destination.arn
+            ]
 
             # See if source can call UpdateStack to use the current role of a stack (setting a new template)
             for stack in relevant_stacks:
@@ -156,11 +171,9 @@ def generate_edges_locally(nodes: List[Node], stack_list: List[dict], scps: Opti
                     service_control_policy_groups=scps
                 )
                 if can_update:
-                    reason = 'can update the CloudFormation stack {} to access'.format(
-                        stack['StackId']
-                    )
+                    reason = f"can update the CloudFormation stack {stack['StackId']} to access"
                     if need_mfa_update:
-                        reason = '(MFA required) ' + reason
+                        reason = f'(MFA required) {reason}'
 
                     result.append(Edge(node_source, node_destination, reason, 'Cloudformation'))
                     break  # let's save ourselves having to dig into every CF stack edge possible
@@ -177,11 +190,10 @@ def generate_edges_locally(nodes: List[Node], stack_list: List[dict], scps: Opti
                     )
 
                     if can_update:
-                        reason = 'can update the CloudFormation stack {} and pass the role to access'.format(
-                            stack['StackId']
-                        )
+                        reason = f"can update the CloudFormation stack {stack['StackId']} and pass the role to access"
+
                         if need_mfa_update or need_mfa_passrole:
-                            reason = '(MFA required) ' + reason
+                            reason = f'(MFA required) {reason}'
 
                         result.append(Edge(node_source, node_destination, reason, 'Cloudformation'))
                         break  # save ourselves from digging into all CF stack edges possible
@@ -207,11 +219,10 @@ def generate_edges_locally(nodes: List[Node], stack_list: List[dict], scps: Opti
                 )
 
                 if can_exe_cs:
-                    reason = 'can create and execute a changeset in CloudFormation for stack {} to access'.format(
-                        stack['StackId']
-                    )
+                    reason = f"can create and execute a changeset in CloudFormation for stack {stack['StackId']} to access"
+
                     if need_mfa_make or need_mfa_exe:
-                        reason = '(MFA required) ' + reason
+                        reason = f'(MFA required) {reason}'
 
                     result.append(Edge(node_source, node_destination, reason, 'Cloudformation'))
                     break  # save ourselves from digging into all CF stack edges possible

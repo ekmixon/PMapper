@@ -140,7 +140,7 @@ def main() -> int:
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('principalmapper.querying.query_interface').setLevel(logging.WARNING)
 
-    logger.debug('Parsed args: {}'.format(parsed_args))
+    logger.debug(f'Parsed args: {parsed_args}')
     if parsed_args.picked_cmd == 'graph':
         return graph_cli.process_arguments(parsed_args)
     elif parsed_args.picked_cmd == 'orgs':

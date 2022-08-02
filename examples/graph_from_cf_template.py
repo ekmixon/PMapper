@@ -46,16 +46,16 @@ def _generate_iam_id(node_type: str, counter: int) -> str:
     https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html
     """
 
-    if node_type == 'user':
-        return 'AIDA{0:016d}'.format(counter)
-    elif node_type == 'role':
-        return 'AROA{0:016d}'.format(counter)
-    elif node_type == 'group':
+    if node_type == 'group':
         return 'AGPA{0:016d}'.format(counter)
     elif node_type == 'policy':
         return 'ANPA{0:016d}'.format(counter)
+    elif node_type == 'role':
+        return 'AROA{0:016d}'.format(counter)
+    elif node_type == 'user':
+        return 'AIDA{0:016d}'.format(counter)
     else:
-        raise ValueError('Unexpected value {} for node_type param'.format(node_type))
+        raise ValueError(f'Unexpected value {node_type} for node_type param')
 
 
 def main():
@@ -72,11 +72,11 @@ def main():
 
     # Parse file
     if parsed_args.json:
-        print('[+] Loading file {}'.format(parsed_args.json))
+        print(f'[+] Loading file {parsed_args.json}')
         fd = open(parsed_args.json)
         data = json.load(fd)
     else:
-        print('[+] Loading file {}'.format(parsed_args.yaml))
+        print(f'[+] Loading file {parsed_args.yaml}')
         fd = open(parsed_args.yaml)
         data = yaml.safe_load(fd)
     fd.close()
@@ -87,7 +87,10 @@ def main():
         'pmapper_version': principalmapper.__version__
     }
 
-    print('[+] Building a Graph object for an account with ID {}'.format(metadata['account_id']))
+    print(
+        f"[+] Building a Graph object for an account with ID {metadata['account_id']}"
+    )
+
 
     if 'Resources' not in data:
         print('[!] Missing required template element "Resources"')
@@ -108,11 +111,9 @@ def main():
         if contents['Type'] == 'AWS::IAM::User':
             properties = contents['Properties']
             node_path = '/' if 'Path' not in properties else properties['Path']
-            node_arn = 'arn:aws:iam::{}:user{}'.format(
-                metadata['account_id'],
-                '{}{}'.format(node_path, properties['UserName'])
-            )
-            print('[+] Adding user {}'.format(node_arn))
+            node_arn = f"arn:aws:iam::{metadata['account_id']}:user{node_path}{properties['UserName']}"
+
+            print(f'[+] Adding user {node_arn}')
             nodes.append(
                 Node(
                     node_arn,

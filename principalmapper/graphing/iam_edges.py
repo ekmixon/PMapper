@@ -41,7 +41,7 @@ class IAMEdgeChecker(EdgeChecker):
         result = generate_edges_locally(nodes, scps)
 
         for edge in result:
-            logger.info("Found new edge: {}\n".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}\n")
 
         return result
 
@@ -93,7 +93,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
                 if create_auth_res:
                     reason = 'can create access keys to authenticate as'
                     if access_keys_mfa:
-                        reason = '(MFA required) ' + reason
+                        reason = f'(MFA required) {reason}'
 
                     result.append(
                         Edge(
@@ -121,7 +121,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
                 if pass_auth_res:
                     reason = 'can set the password to authenticate as'
                     if mfa_res:
-                        reason = '(MFA required) ' + reason
+                        reason = f'(MFA required) {reason}'
                     result.append(Edge(node_source, node_destination, reason, 'IAM'))
 
             if ':role/' in node_destination.arn:
@@ -136,7 +136,7 @@ def generate_edges_locally(nodes: List[Node], scps: Optional[List[List[dict]]] =
                 if update_role_res:
                     reason = 'can update the trust document to access'
                     if mfa_res:
-                        reason = '(MFA required) ' + reason
+                        reason = f'(MFA required) {reason}'
                     result.append(Edge(node_source, node_destination, reason, 'IAM'))
 
     return result

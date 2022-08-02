@@ -164,24 +164,25 @@ class PMapperREPL:
                                 raise ValueError('Format for condition args not matched: <key>=<value>')
                             key = components[0]
                             value = '='.join(components[1:])
-                            conditions.update({key: value})
+                            conditions[key] = value
 
                     query_actions.argquery(self.graph, parsed_args.principal, parsed_args.action, parsed_args.resource,
                                            conditions, parsed_args.preset, parsed_args.skip_admin, sys.stdout,
                                            parsed_args.debug)
 
-                elif parsed_args.subcommand == 'help':
+                elif (
+                    parsed_args.subcommand == 'help'
+                    or parsed_args.subcommand != 'exit'
+                ):
                     self._print_help()
-                elif parsed_args.subcommand == 'exit':
+                else:
                     print('Exiting.')
                     break
-                else:
-                    self._print_help()
             except KeyboardInterrupt as ex:
                 print('Ctrl+C detected. Exiting.')
                 break
             except Exception as ex:
-                print('Encountered an error when executing input: {}'.format(command))
+                print(f'Encountered an error when executing input: {command}')
                 print(ex.args)
 
             # Loop

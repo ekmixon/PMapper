@@ -133,7 +133,7 @@ def process_arguments(parsed_args: Namespace):
             service_list = [x for x in service_list_base if x not in parsed_args.exclude_services]
         else:
             service_list = service_list_base
-        logger.debug('Service list after processing args: {}'.format(service_list))
+        logger.debug(f'Service list after processing args: {service_list}')
 
         # need to know account ID to search potential SCPs
         if parsed_args.localstack_endpoint is not None:
@@ -149,18 +149,27 @@ def process_arguments(parsed_args: Namespace):
                 stsclient = session.create_client('sts')
             caller_identity = stsclient.get_caller_identity()
             caller_account = caller_identity['Account']
-            logger.debug("Caller Identity: {}".format(caller_identity))
+            logger.debug(f"Caller Identity: {caller_identity}")
 
             org_tree_search_dir = Path(get_storage_root())
             org_id_pattern = re.compile(r'/o-\w+')
             for subdir in org_tree_search_dir.iterdir():
                 if org_id_pattern.search(str(subdir)) is not None:
-                    logger.debug('Checking {} to see if account {} is a member'.format(str(subdir), caller_account))
+                    logger.debug(
+                        f'Checking {str(subdir)} to see if account {caller_account} is a member'
+                    )
+
                     org_tree = OrganizationTree.create_from_dir(str(subdir))
                     if caller_account in org_tree.accounts:
-                        logger.info('Account {} is a member of Organization {}'.format(caller_account, org_tree.org_id))
+                        logger.info(
+                            f'Account {caller_account} is a member of Organization {org_tree.org_id}'
+                        )
+
                         if caller_account == org_tree.management_account_id:
-                            logger.info('Account {} is the management account, SCPs do not apply'.format(caller_account))
+                            logger.info(
+                                f'Account {caller_account} is the management account, SCPs do not apply'
+                            )
+
                         else:
                             logger.info('Identifying and applying SCPs for the graphing process')
                             scps = query_orgs.produce_scp_list_by_account_id(caller_account, org_tree)
@@ -204,6 +213,6 @@ def process_arguments(parsed_args: Namespace):
                 with open(str(metadata_file)) as fd:
                     account_metadata = json.load(fd)
                 version = account_metadata['pmapper_version']
-                print("{} (PMapper Version {})".format(direct.name, version))
+                print(f"{direct.name} (PMapper Version {version})")
 
     return 0

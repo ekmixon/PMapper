@@ -111,9 +111,11 @@ def search_authorization_across_accounts(graph_scp_pairs: List[Tuple[Graph, Opti
     OrganizationTree object and produce the applicable SCPs by calling
     principalmapper.querying.query_orgs.produce_scp_list and passing the graph + org-tree objects."""
 
-    account_id_graph_scp_pair_map = {}
-    for graph_scp_pair in graph_scp_pairs:
-        account_id_graph_scp_pair_map[graph_scp_pair[0].metadata['account_id']] = graph_scp_pair
+    account_id_graph_scp_pair_map = {
+        graph_scp_pair[0].metadata['account_id']: graph_scp_pair
+        for graph_scp_pair in graph_scp_pairs
+    }
+
     source_graph_scp_pair = account_id_graph_scp_pair_map[arns.get_account_id(principal.arn)]
 
     if local_check_authorization_full(principal, action_to_check, resource_to_check, condition_keys_to_check,
@@ -138,7 +140,7 @@ def _prepare_condition_context(original_dict: _UODict) -> CaseInsensitiveDict:
     """Returns a CaseInsensitiveDict with the given dictionary contents, while also performing a sanity check
     to ensure that there are no duplicate keys in the provided context."""
 
-    if len(original_dict) != len(set([x.lower() for x in original_dict.keys()])):
+    if len(original_dict) != len({x.lower() for x in original_dict.keys()}):
         raise ValueError('Detected a duplicate context key/value pair. Ensure that there are no duplicate context '
                          'keys, case-insensitive.')
 
@@ -186,8 +188,8 @@ def _infer_condition_keys(principal: Node, current_keys: CaseInsensitiveDict) ->
 
     # NOTE: tag keys are checked for case-insensitive equality already, no worries about collisions
     for tag_key, tag_value in principal.tags.items():
-        if 'aws:PrincipalTag/{}'.format(tag_key) not in current_keys:
-            result['aws:PrincipalTag/{}'.format(tag_key)] = tag_value
+        if f'aws:PrincipalTag/{tag_key}' not in current_keys:
+            result[f'aws:PrincipalTag/{tag_key}'] = tag_value
 
     return result
 
@@ -234,12 +236,10 @@ def local_check_authorization(principal: Node, action_to_check: str, resource_to
     prepped_condition_keys = _prepare_condition_context(conditions_keys_copy)
     prepped_condition_keys.update(_infer_condition_keys(principal, prepped_condition_keys))
 
-    logger.debug('Testing authorization for Principal: {}, Action: {}, Resource: {}, Conditions: {}'.format(
-        principal.arn,
-        action_to_check,
-        resource_to_check,
-        conditions_keys_copy
-    ))
+    logger.debug(
+        f'Testing authorization for Principal: {principal.arn}, Action: {action_to_check}, Resource: {resource_to_check}, Conditions: {conditions_keys_copy}'
+    )
+
 
     # Handle permission boundaries if applicable
     if principal.permissions_boundary is not None:
@@ -251,13 +251,23 @@ def local_check_authorization(principal: Node, action_to_check: str, resource_to
             return False
 
     # must have a matching Allow statement, otherwise it's an implicit deny
-    if not has_matching_statement(principal, 'Allow', action_to_check, resource_to_check,
-                                  prepped_condition_keys):
-        return False
-
-    # must not have a matching Deny statement, otherwise it's an explicit deny
-    return not has_matching_statement(principal, 'Deny', action_to_check, resource_to_check,
-                                      prepped_condition_keys)
+    return (
+        not has_matching_statement(
+            principal,
+            'Deny',
+            action_to_check,
+            resource_to_check,
+            prepped_condition_keys,
+        )
+        if has_matching_statement(
+            principal,
+            'Allow',
+            action_to_check,
+            resource_to_check,
+            prepped_condition_keys,
+        )
+        else False
+    )
 
 
 def local_check_authorization_full(principal: Node, action_to_check: str, resource_to_check: str,
@@ -289,15 +299,9 @@ def local_check_authorization_full(principal: Node, action_to_check: str, resour
     prepped_condition_keys.update(_infer_condition_keys(principal, prepped_condition_keys))
 
     logger.debug(
-        'Testing authorization for: principal: {}, action: {}, resource: {}, conditions: {}, Resource Policy: {}, SCPs: {}, Session Policy: {}'.format(
-            principal.arn,
-            action_to_check,
-            resource_to_check,
-            conditions_keys_copy,
-            resource_policy,
-            service_control_policy_groups,
-            session_policy
-        ))
+        f'Testing authorization for: principal: {principal.arn}, action: {action_to_check}, resource: {resource_to_check}, conditions: {conditions_keys_copy}, Resource Policy: {resource_policy}, SCPs: {service_control_policy_groups}, Session Policy: {session_policy}'
+    )
+
 
     # Check all policies for a matching deny
     for policy in principal.attached_policies:
@@ -324,27 +328,42 @@ def local_check_authorization_full(principal: Node, action_to_check: str, resour
                 logger.debug('Explicit Deny: Resource Policy')
                 return False
 
-    if session_policy is not None:
-        if policy_has_matching_statement(session_policy, 'Deny', action_to_check, resource_to_check, prepped_condition_keys):
-            logger.debug('Explict Deny: Session policy')
-            return False
+    if session_policy is not None and policy_has_matching_statement(
+        session_policy,
+        'Deny',
+        action_to_check,
+        resource_to_check,
+        prepped_condition_keys,
+    ):
+        logger.debug('Explict Deny: Session policy')
+        return False
 
-    if principal.permissions_boundary is not None:
-        if policy_has_matching_statement(principal.permissions_boundary, 'Deny', action_to_check, resource_to_check, prepped_condition_keys):
-            logger.debug('Explicit Deny: Permission Boundary')
-            return False
+    if (
+        principal.permissions_boundary is not None
+        and policy_has_matching_statement(
+            principal.permissions_boundary,
+            'Deny',
+            action_to_check,
+            resource_to_check,
+            prepped_condition_keys,
+        )
+    ):
+        logger.debug('Explicit Deny: Permission Boundary')
+        return False
 
     # Check SCPs
     if service_control_policy_groups is not None:
         for service_control_policy_group in service_control_policy_groups:
-            # For every group of SCPs (policies attached to the ancestors of the account and the current account), the
-            # group of SCPs have to have a matching allow statement
-            scp_group_result = False
-            for service_control_policy in service_control_policy_group:
-                if policy_has_matching_statement(service_control_policy, 'Allow', action_to_check, resource_to_check,
-                                                 prepped_condition_keys):
-                    scp_group_result = True
-                    break
+            scp_group_result = any(
+                policy_has_matching_statement(
+                    service_control_policy,
+                    'Allow',
+                    action_to_check,
+                    resource_to_check,
+                    prepped_condition_keys,
+                )
+                for service_control_policy in service_control_policy_group
+            )
 
             if not scp_group_result:
                 logger.debug('Implicit Deny: SCP group')
@@ -355,34 +374,47 @@ def local_check_authorization_full(principal: Node, action_to_check: str, resour
         rp_auth_result = resource_policy_authorization(principal, resource_owner, resource_policy, action_to_check, resource_to_check, prepped_condition_keys)
         if arns.get_account_id(principal.arn) == resource_owner:
             # resource is owned by account
-            if arns.get_service(resource_to_check) in ('iam', 'kms'):  # TODO: tuple or list?
-                # IAM and KMS require the trust/key policy to match
-                if rp_auth_result is not ResourcePolicyEvalResult.NODE_MATCH and rp_auth_result is not ResourcePolicyEvalResult.ROOT_MATCH:
-                    logger.debug('IAM/KMS Denial: RP must authorize even with same account')
-                    return False
+            if (
+                arns.get_service(resource_to_check) in ('iam', 'kms')
+                and rp_auth_result is not ResourcePolicyEvalResult.NODE_MATCH
+                and rp_auth_result is not ResourcePolicyEvalResult.ROOT_MATCH
+            ):
+                logger.debug('IAM/KMS Denial: RP must authorize even with same account')
+                return False
             if rp_auth_result is ResourcePolicyEvalResult.NODE_MATCH:
                 # If the specific IAM User/Role is given in the resource policy's Principal element and from the same
                 # account as the resource, we're done since we've already done deny-checks and the permission boundaries
                 # + session policy + principal policies aren't necessary to grant authorization
                 logger.debug('RP approval: skip further evaluation')
                 return True
-        else:
-            # resource is owned by another account
-            if rp_auth_result is ResourcePolicyEvalResult.NO_MATCH:
-                logger.debug('Cross-Account authorization denied')
-                return False
+        elif rp_auth_result is ResourcePolicyEvalResult.NO_MATCH:
+            logger.debug('Cross-Account authorization denied')
+            return False
 
     # Check permission boundary
-    if principal.permissions_boundary is not None:
-        if not policy_has_matching_statement(principal.permissions_boundary, 'Allow', action_to_check, resource_to_check, prepped_condition_keys):
-            logger.debug('Implicit Deny: Permission Boundary')
-            return False
+    if (
+        principal.permissions_boundary is not None
+        and not policy_has_matching_statement(
+            principal.permissions_boundary,
+            'Allow',
+            action_to_check,
+            resource_to_check,
+            prepped_condition_keys,
+        )
+    ):
+        logger.debug('Implicit Deny: Permission Boundary')
+        return False
 
     # Check session policy
-    if session_policy is not None:
-        if not policy_has_matching_statement(session_policy, 'Allow', action_to_check, resource_to_check, prepped_condition_keys):
-            logger.debug('Implicit Deny: Session Policy')
-            return False
+    if session_policy is not None and not policy_has_matching_statement(
+        session_policy,
+        'Allow',
+        action_to_check,
+        resource_to_check,
+        prepped_condition_keys,
+    ):
+        logger.debug('Implicit Deny: Session Policy')
+        return False
 
     # Check principal's policies
     for policy in principal.attached_policies:

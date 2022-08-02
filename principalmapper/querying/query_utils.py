@@ -38,23 +38,40 @@ def get_search_list(graph: Graph, node: Node) -> List[List[Edge]]:
 
     # Special-case: node is an "admin", so we make up admin edges and return them all
     if node.is_admin:
-        for other_node in graph.nodes:
-            if node == other_node:
-                continue
-            result.append([Edge(node, other_node, 'can access through administrative actions', 'Admin')])
+        result.extend(
+            [
+                Edge(
+                    node,
+                    other_node,
+                    'can access through administrative actions',
+                    'Admin',
+                )
+            ]
+            for other_node in graph.nodes
+            if node != other_node
+        )
+
         return result
 
     # run through initial edges
-    for edge in get_edges_with_node_source(graph, node, explored_nodes):
-        result.append([edge])
+    result.extend(
+        [edge]
+        for edge in get_edges_with_node_source(graph, node, explored_nodes)
+    )
+
     explored_nodes.append(node)
 
     # dig through result list
     index = 0
     while index < len(result):
         current_node = result[index][-1].destination
-        for edge in get_edges_with_node_source(graph, current_node, explored_nodes):
-            result.append(result[index][:] + [edge])
+        result.extend(
+            result[index][:] + [edge]
+            for edge in get_edges_with_node_source(
+                graph, current_node, explored_nodes
+            )
+        )
+
         explored_nodes.append(current_node)
         index += 1
 
@@ -73,11 +90,10 @@ def is_connected(graph: Graph, source: Node, destination: Node) -> bool:
     if source.is_admin:
         return True
 
-    for node_list in get_search_list(graph, source):
-        if node_list[-1].destination == destination:
-            return True
-
-    return False
+    return any(
+        node_list[-1].destination == destination
+        for node_list in get_search_list(graph, source)
+    )
 
 
 def pull_cached_resource_policy_by_arn(graph: Graph, arn: Optional[str], query: str = None) -> Union[Policy, dict]:
@@ -95,22 +111,23 @@ def pull_cached_resource_policy_by_arn(graph: Graph, arn: Optional[str], query: 
         matches = pattern.match(query)
         if matches is None:
             raise ValueError('Resource policy retrieval error: could not extract resource ARN from query')
-        arn = matches.group(1)
+        arn = matches[1]
     if '?' in arn or '*' in arn:
         raise ValueError('Resource component from query must not have wildcard (? or *) when evaluating '
                          'resource policies.')
 
-    logger.debug('Looking for cached policy for {}'.format(arn))
+    logger.debug(f'Looking for cached policy for {arn}')
 
     # manipulate the ARN as needed
     service = arns.get_service(arn)
     if service == 's3':
         # we only need the ARN of the bucket
-        search_arn = 'arn:{}:s3:::{}'.format(arns.get_partition(arn), arns.get_resource(arn).split('/')[0])
+        search_arn = f"arn:{arns.get_partition(arn)}:s3:::{arns.get_resource(arn).split('/')[0]}"
+
     elif service == 'iam':
         # special case: trust policies
         role_name = arns.get_resource(arn).split('/')[-1]  # get the last part of :role/path/to/role_name
-        role_node = graph.get_node_by_searchable_name('role/{}'.format(role_name))
+        role_node = graph.get_node_by_searchable_name(f'role/{role_name}')
         return role_node.trust_policy
     elif service == 'sns':
         search_arn = arn
@@ -121,13 +138,16 @@ def pull_cached_resource_policy_by_arn(graph: Graph, arn: Optional[str], query: 
     elif service == 'secretsmanager':
         search_arn = arn
     else:
-        raise NotImplementedError('Service policies for {} are not (currently) cached.'.format(service))
+        raise NotImplementedError(
+            f'Service policies for {service} are not (currently) cached.'
+        )
+
 
     for policy in graph.policies:
         if search_arn == policy.arn:
             return policy
 
-    raise ValueError('Unable to locate a cached policy for resource {}'.format(arn))
+    raise ValueError(f'Unable to locate a cached policy for resource {arn}')
 
 
 def pull_resource_policy_by_arn(session: botocore.session.Session, arn: Optional[str], query: str = None) -> dict:
@@ -142,7 +162,7 @@ def pull_resource_policy_by_arn(session: botocore.session.Session, arn: Optional
         matches = pattern.match(query)
         if matches is None:
             raise ValueError('Resource policy retrieval error: could not extract resource ARN from query')
-        arn = matches.group(1)
+        arn = matches[1]
         if '?' in arn or '*' in arn:
             raise ValueError('Resource component from query must not have wildcard (? or *) when evaluating '
                              'resource policies.')
@@ -152,39 +172,38 @@ def pull_resource_policy_by_arn(session: botocore.session.Session, arn: Optional
         # arn:aws:iam::<account_id>:role/<role_name>
         client = session.create_client('iam')
         role_name = arns.get_resource(arn).split('/')[-1]
-        logger.debug('Calling IAM API to retrieve AssumeRolePolicyDocument of {}'.format(role_name))
-        trust_doc = client.get_role(RoleName=role_name)['Role']['AssumeRolePolicyDocument']
-        return trust_doc
+        logger.debug(
+            f'Calling IAM API to retrieve AssumeRolePolicyDocument of {role_name}'
+        )
+
+        return client.get_role(RoleName=role_name)['Role']['AssumeRolePolicyDocument']
     elif service == 's3':
         # arn:aws:s3:::<bucket>/<path_to_object_with_potential_colons>
         client = session.create_client('s3')
         bucket_name = arns.get_resource(arn).split('arn:aws:s3:::')[-1].split('/')[0]
-        logger.debug('Calling S3 API to retrieve bucket policy of {}'.format(bucket_name))
-        bucket_policy = json.loads(client.get_bucket_policy(Bucket=bucket_name)['Policy'])
-        return bucket_policy
+        logger.debug(f'Calling S3 API to retrieve bucket policy of {bucket_name}')
+        return json.loads(client.get_bucket_policy(Bucket=bucket_name)['Policy'])
     elif service == 'sns':
         region = arns.get_region(arn)
         client = session.create_client('sns', region_name=region)
-        logger.debug('Calling SNS API to retrieve topic policy of {}'.format(arn))
+        logger.debug(f'Calling SNS API to retrieve topic policy of {arn}')
         policy_str = client.get_topic_attributes(TopicArn=arn)['Attributes']['Policy']
         return json.loads(policy_str)
     elif service == 'sqs':
         region = arns.get_region(arn)
         client = session.create_client('sqs', region_name=region)
-        logger.debug('Calling SQS API to retrieve queue policy of {}'.format(arn))
-        queue_url = 'https://sqs.{}.amazonaws.com/{}/{}'.format(
-            arns.get_region(arn),
-            arns.get_account_id(arn),
-            arns.get_resource(arn)
-        )  # TODO: future proof queue URL creation? this still work with FIFO queues?
+        logger.debug(f'Calling SQS API to retrieve queue policy of {arn}')
+        queue_url = f'https://sqs.{arns.get_region(arn)}.amazonaws.com/{arns.get_account_id(arn)}/{arns.get_resource(arn)}'
+
         policy_str = client.get_queue_attributes(QueueUrl=queue_url, AttributeNames=['Policy'])['Policy']
         return json.loads(policy_str)
     elif service == 'kms':
         region = arns.get_region(arn)
         client = session.create_client('kms', region_name=region)
-        logger.debug('Calling KMS API to retrieve key policy of {}'.format(arn))
-        key_policy = json.loads(client.get_key_policy(KeyId=arn, PolicyName='default')['Policy'])
-        return key_policy
+        logger.debug(f'Calling KMS API to retrieve key policy of {arn}')
+        return json.loads(
+            client.get_key_policy(KeyId=arn, PolicyName='default')['Policy']
+        )
 
 
 def get_interaccount_search_list(all_graphs: List[Graph], inter_account_edges: List[Edge], node: Node) -> List[List[Edge]]:
@@ -195,19 +214,16 @@ def get_interaccount_search_list(all_graphs: List[Graph], inter_account_edges: L
 
     result = []
     nodes_found = [node]
-    nodes_explored = []
-
-    account_id_graph_map = {}
-    for graph in all_graphs:
-        account_id_graph_map[graph.metadata['account_id']] = graph
+    account_id_graph_map = {
+        graph.metadata['account_id']: graph for graph in all_graphs
+    }
 
     # Get initial list of edges
     first_set = get_edges_interaccount(account_id_graph_map[arns.get_account_id(node.arn)], inter_account_edges, node, nodes_found)
     for found_edge in first_set:
         nodes_found.append(found_edge.destination)
         result.append([found_edge])
-    nodes_explored.append(node)
-
+    nodes_explored = [node]
     # dig through result list
     index = 0
     while index < len(result):
@@ -230,11 +246,12 @@ def get_edges_interaccount(source_graph: Graph, inter_account_edges: List[Edge],
     If the given node is an admin, those Edge objects get generated and returned.
     """
 
-    result = []
+    result = [
+        outbound_edge
+        for outbound_edge in node.get_outbound_edges(source_graph)
+        if outbound_edge.destination not in ignored_nodes
+    ]
 
-    for outbound_edge in node.get_outbound_edges(source_graph):
-        if outbound_edge.destination not in ignored_nodes:
-            result.append(outbound_edge)
 
     for inter_account_edge in inter_account_edges:
         if inter_account_edge.source == node and inter_account_edge.destination not in ignored_nodes:

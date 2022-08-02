@@ -45,20 +45,12 @@ class Node(object):
             raise ValueError('The parameter arn must be a valid ARN for an IAM user or role.')
         self.arn = arn
 
-        if id_value is None or len(id_value) == 0:
+        if id_value is None or not id_value:
             raise ValueError('The parameter id_value must be a non-empty string.')
         self.id_value = id_value
 
-        if attached_policies is None:
-            self.attached_policies = []
-        else:
-            self.attached_policies = attached_policies
-
-        if group_memberships is None:
-            self.group_memberships = []
-        else:
-            self.group_memberships = group_memberships
-
+        self.attached_policies = [] if attached_policies is None else attached_policies
+        self.group_memberships = [] if group_memberships is None else group_memberships
         if resource_value.startswith('user/') and trust_policy is not None:
             raise ValueError('IAM users do not have trust policies, pass None for the parameter trust_policy.')
         if resource_value.startswith('role/') and (trust_policy is None or not isinstance(trust_policy, dict)):
@@ -71,22 +63,14 @@ class Node(object):
 
         self.active_password = active_password
 
-        if num_access_keys is None:
-            self.access_keys = []
-        else:
-            self.access_keys = num_access_keys
-
+        self.access_keys = [] if num_access_keys is None else num_access_keys
         self.is_admin = is_admin
 
         self.permissions_boundary = permissions_boundary  # None denotes no permissions boundary, str denotes need to fill in
 
         self.has_mfa = has_mfa
 
-        if tags is None:
-            self.tags = {}
-        else:
-            self.tags = tags
-
+        self.tags = {} if tags is None else tags
         self.cache = {}
 
     def searchable_name(self) -> str:
@@ -96,7 +80,7 @@ class Node(object):
         """
         if 'searchable_name' not in self.cache:
             components = arns.get_resource(self.arn).split('/')
-            self.cache['searchable_name'] = "{}/{}".format(components[0], components[-1])
+            self.cache['searchable_name'] = f"{components[0]}/{components[-1]}"
         return self.cache['searchable_name']
 
     def get_outbound_edges(self, graph):  # -> List[Edge], can't import Edge/Graph in this module

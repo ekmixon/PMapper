@@ -50,8 +50,12 @@ class LambdaEdgeChecker(EdgeChecker):
         lambda_clients = []
         if self.session is not None:
             lambda_regions = botocore_tools.get_regions_to_search(self.session, 'lambda', region_allow_list, region_deny_list)
-            for region in lambda_regions:
-                lambda_clients.append(self.session.create_client('lambda', region_name=region, **lambdaargs))
+            lambda_clients.extend(
+                self.session.create_client(
+                    'lambda', region_name=region, **lambdaargs
+                )
+                for region in lambda_regions
+            )
 
         # grab existing lambda functions
         function_list = []
@@ -59,19 +63,23 @@ class LambdaEdgeChecker(EdgeChecker):
             try:
                 paginator = lambda_client.get_paginator('list_functions')
                 for page in paginator.paginate(PaginationConfig={'PageSize': 25}):
-                    for func in page['Functions']:
-                        function_list.append(func)
+                    function_list.extend(iter(page['Functions']))
             except ClientError as ex:
-                logger.warning('Unable to search region {} for stacks. The region may be disabled, or the error may '
-                               'be caused by an authorization issue. Continuing.'.format(lambda_client.meta.region_name))
-                logger.debug('Exception details: {}'.format(ex))
+                logger.warning(
+                    f'Unable to search region {lambda_client.meta.region_name} for stacks. The region may be disabled, or the error may be caused by an authorization issue. Continuing.'
+                )
+
+                logger.debug(f'Exception details: {ex}')
 
         logger.info('Generating Edges based on Lambda data.')
-        logger.debug('Identified {} Lambda functions for processing'.format(len(function_list)))
+        logger.debug(
+            f'Identified {len(function_list)} Lambda functions for processing'
+        )
+
         result = generate_edges_locally(nodes, function_list, scps)
 
         for edge in result:
-            logger.info("Found new edge: {}".format(edge.describe_edge()))
+            logger.info(f"Found new edge: {edge.describe_edge()}")
 
         return result
 
@@ -160,24 +168,21 @@ def generate_edges_locally(nodes: List[Node], function_list: List[dict], scps: O
 
             # check that source can modify a Lambda function and use its existing role
             for func, can_change_code, need_mfa in func_data:
-                if node_destination.arn == func['Role']:
-                    if can_change_code:
-                        if need_mfa:
-                            reason = '(requires MFA) can use Lambda to edit an existing function ({}) to access'.format(
-                                func['FunctionArn']
-                            )
-                        else:
-                            reason = 'can use Lambda to edit an existing function ({}) to access'.format(
-                                func['FunctionArn']
-                            )
-                        new_edge = Edge(
-                            node_source,
-                            node_destination,
-                            reason,
-                            'Lambda'
-                        )
-                        result.append(new_edge)
-                        break
+                if node_destination.arn == func['Role'] and can_change_code:
+                    if need_mfa:
+                        reason = f"(requires MFA) can use Lambda to edit an existing function ({func['FunctionArn']}) to access"
+
+                    else:
+                        reason = f"can use Lambda to edit an existing function ({func['FunctionArn']}) to access"
+
+                    new_edge = Edge(
+                        node_source,
+                        node_destination,
+                        reason,
+                        'Lambda'
+                    )
+                    result.append(new_edge)
+                    break
 
                 can_change_config, need_mfa_2 = query_interface.local_check_authorization_handling_mfa(
                     node_source,
@@ -189,13 +194,11 @@ def generate_edges_locally(nodes: List[Node], function_list: List[dict], scps: O
 
                 if can_change_config and can_change_code and can_pass_role:
                     if need_mfa or need_mfa_2:
-                        reason = '(requires MFA) can use Lambda to edit an existing function ({}) to access'.format(
-                            func['FunctionArn']
-                        )
+                        reason = f"(requires MFA) can use Lambda to edit an existing function ({func['FunctionArn']}) to access"
+
                     else:
-                        reason = 'can use Lambda to edit an existing function ({}) to access'.format(
-                            func['FunctionArn']
-                        )
+                        reason = f"can use Lambda to edit an existing function ({func['FunctionArn']}) to access"
+
                     new_edge = Edge(
                         node_source,
                         node_destination,

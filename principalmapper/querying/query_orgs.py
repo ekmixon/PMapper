@@ -28,19 +28,18 @@ def _grab_policies_and_traverse(org_nodes: List[OrganizationNode], parts, index,
     for org_node in org_nodes:
         if org_node.ou_id != parts[index]:
             continue
+        # ASSUMPTION: all OUs/Accounts in an org HAVE to have at least one policy when SCPs are enabled, so this
+        # catches the alternative and does an early return of None. None is interpreted by querying mechanisms
+        # as meaning SCPs are NOT considered during authorization
+        if len(org_node.scps) == 0:
+            return None
+        result.append([x.policy_doc for x in org_node.scps])
+        if parts[index + 1] == '':
+            for account in org_node.accounts:
+                if account.account_id == account_id:
+                    result.append([x.policy_doc for x in account.scps])
         else:
-            # ASSUMPTION: all OUs/Accounts in an org HAVE to have at least one policy when SCPs are enabled, so this
-            # catches the alternative and does an early return of None. None is interpreted by querying mechanisms
-            # as meaning SCPs are NOT considered during authorization
-            if len(org_node.scps) == 0:
-                return None
-            result.append([x.policy_doc for x in org_node.scps])
-            if parts[index + 1] == '':
-                for account in org_node.accounts:
-                    if account.account_id == account_id:
-                        result.append([x.policy_doc for x in account.scps])
-            else:
-                _grab_policies_and_traverse(org_node.child_nodes, parts, index + 1, account_id, result)
+            _grab_policies_and_traverse(org_node.child_nodes, parts, index + 1, account_id, result)
 
 
 def _find_path_or_traverse(search_path: List[str], org_nodes: List[OrganizationNode], target_account: str):
@@ -49,10 +48,9 @@ def _find_path_or_traverse(search_path: List[str], org_nodes: List[OrganizationN
         search_path.append(org_node.ou_id)
         if target_account in [x.account_id for x in org_node.accounts]:
             return '/'.join(search_path) + '/'
-        else:
-            traverse_result = _find_path_or_traverse(search_path, org_node.child_nodes, target_account)
-            if traverse_result is not None:
-                return traverse_result
+        traverse_result = _find_path_or_traverse(search_path, org_node.child_nodes, target_account)
+        if traverse_result is not None:
+            return traverse_result
         search_path.pop()
     return None
 
@@ -73,7 +71,7 @@ def produce_scp_list_by_account_id(account_id: str, org: OrganizationTree) -> Op
 
     search_stack = [org.org_id]
     search_path = _find_path_or_traverse(search_stack, org.root_ous, account_id)
-    logger.debug('Account organization path: {}'.format(search_path))
+    logger.debug(f'Account organization path: {search_path}')
     search_path_parts = search_path.split('/')
     _grab_policies_and_traverse(org.root_ous, search_path_parts, 1, account_id, result)
 

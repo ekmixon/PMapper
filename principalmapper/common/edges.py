@@ -42,11 +42,7 @@ class Edge(object):
 
     def describe_edge(self) -> str:
         """Returns a human-readable string explaining the edge"""
-        return "{} {} {}".format(
-            self.source.searchable_name(),
-            self.reason,
-            self.destination.searchable_name()
-        )
+        return f"{self.source.searchable_name()} {self.reason} {self.destination.searchable_name()}"
 
     def to_dictionary(self) -> dict:
         """Returns a dictionary representation of this object for storage"""

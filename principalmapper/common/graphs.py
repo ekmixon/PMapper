@@ -48,7 +48,7 @@ class Graph(object):
         for arg, value in {'nodes': nodes, 'edges': edges, 'policies': policies, 'groups': groups,
                            'metadata': metadata}.items():
             if value is None:
-                raise ValueError('Required constructor argument {} was None'.format(arg))
+                raise ValueError(f'Required constructor argument {arg} was None')
         self.nodes = nodes
         self.edges = edges
         self.policies = policies
@@ -61,10 +61,9 @@ class Graph(object):
 
     def get_node_by_searchable_name(self, name: str) -> Optional[Node]:
         """Locates a node by a given searchable name, returns the Node or None"""
-        for node in self.nodes:
-            if node.searchable_name() == name:
-                return node
-        return None
+        return next(
+            (node for node in self.nodes if node.searchable_name() == name), None
+        )
 
     def store_graph_as_json(self, root_directory: str):
         """Stores the current Graph as a set of JSON documents on-disk in a standard layout.
@@ -126,10 +125,10 @@ class Graph(object):
         Validates, using metadata, that the version of Principal Mapper that created the graph is the same
         major/minor version of the current version of Principal Mapper. Raises a ValueError otherwise.
         """
-        logger.debug('Loading Graph object from {}'.format(root_directory))
+        logger.debug(f'Loading Graph object from {root_directory}')
         rootpath = root_directory
         if not os.path.exists(rootpath):
-            raise ValueError('Did not find file at: {}'.format(rootpath))
+            raise ValueError(f'Did not find file at: {rootpath}')
         graphdir = os.path.join(rootpath, 'graph')
         metadatafilepath = os.path.join(rootpath, 'metadata.json')
         nodesfilepath = os.path.join(graphdir, 'nodes.json')
@@ -143,18 +142,23 @@ class Graph(object):
         current_pmapper_version = packaging.version.parse(principalmapper.__version__)
         loaded_graph_version = packaging.version.parse(metadata['pmapper_version'])
         if current_pmapper_version.release[0] != loaded_graph_version.release[0] or \
-                current_pmapper_version.release[1] != loaded_graph_version.release[1]:
-            raise ValueError('Loaded Graph data was from a different version of Principal Mapper ({}), but the current '
-                             'version of Principal Mapper ({}) may not support it. Either update the stored Graph data '
-                             'and its metadata, or regraph the account.'.format(loaded_graph_version,
-                                                                                current_pmapper_version))
+                    current_pmapper_version.release[1] != loaded_graph_version.release[1]:
+            raise ValueError(
+                f'Loaded Graph data was from a different version of Principal Mapper ({loaded_graph_version}), but the current version of Principal Mapper ({current_pmapper_version}) may not support it. Either update the stored Graph data and its metadata, or regraph the account.'
+            )
 
-        policies = []
+
         with open(policiesfilepath) as f:
             policies_file_contents = json.load(f)
 
-        for policy in policies_file_contents:
-            policies.append(Policy(arn=policy['arn'], name=policy['name'], policy_doc=policy['policy_doc']))
+        policies = [
+            Policy(
+                arn=policy['arn'],
+                name=policy['name'],
+                policy_doc=policy['policy_doc'],
+            )
+            for policy in policies_file_contents
+        ]
 
         with open(groupsfilepath) as f:
             unresolved_groups = json.load(f)
@@ -175,7 +179,6 @@ class Graph(object):
         for node in unresolved_nodes:
             # dig through string list of groups and policies to match up with group and policy objects
             node_policies = []
-            group_memberships = []
             for policy_ref in node['attached_policies']:
                 for policy in policies:
                     if policy_ref['arn'] == policy.arn and policy_ref['name'] == policy.name:
@@ -190,9 +193,10 @@ class Graph(object):
                         node_permission_boundary = policy
                         break
 
-            for group in groups:
-                if group.arn in node['group_memberships']:
-                    group_memberships.append(group)
+            group_memberships = [
+                group for group in groups if group.arn in node['group_memberships']
+            ]
+
             nodes.append(Node(arn=node['arn'], id_value=node['id_value'], attached_policies=node_policies,
                               group_memberships=group_memberships, trust_policy=node['trust_policy'],
                               instance_profile=node['instance_profile'], num_access_keys=node['access_keys'],

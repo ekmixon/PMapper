@@ -58,9 +58,7 @@ def gen_report(graph: Graph) -> Report:
         graph.metadata['account_id'],
         dt.datetime.now(dt.timezone.utc),
         findings,
-        'Findings identified using Principal Mapper ({}) from NCC Group: https://github.com/nccgroup/PMapper'.format(
-            principalmapper.__version__
-        )
+        f'Findings identified using Principal Mapper ({principalmapper.__version__}) from NCC Group: https://github.com/nccgroup/PMapper',
     )
 
 
@@ -92,7 +90,7 @@ def gen_privesc_findings(graph: Graph) -> List[Finding]:
         if privesc_res:
             node_path_list.append((node, edge_list))
 
-    if len(node_path_list) > 0:
+    if node_path_list:
         description_preamble = 'In AWS, IAM Principals such as IAM Users or IAM Roles have their permissions defined ' \
                                'using IAM Policies. These policies describe different actions, resources, and ' \
                                'conditions where the principal can make a given API call to a service.\n\n' \
@@ -105,22 +103,25 @@ def gen_privesc_findings(graph: Graph) -> List[Finding]:
         description_body = ''
         for node, edge_list in node_path_list:
             end_of_list = edge_list[-1].destination
-            description_body += '* {} can escalate privileges by accessing the administrative principal {}:\n'.format(
-                node.searchable_name(), end_of_list.searchable_name())
+            description_body += f'* {node.searchable_name()} can escalate privileges by accessing the administrative principal {end_of_list.searchable_name()}:\n'
+
             for edge in edge_list:
-                description_body += '   * {}\n'.format(edge.describe_edge())
+                description_body += f'   * {edge.describe_edge()}\n'
             description_body += '\n'
 
-        result.append(Finding(
-            'IAM {} Can Escalate Privileges'.format('Principals' if len(node_path_list) > 1 else 'Principal'),
-            'High',
-            'A lower-privilege IAM User or Role is able to gain administrative privileges. This could lead to the '
-            'lower-privilege principal being used to compromise the account and its resources.',
-            description_preamble + description_body,
-            'Review the IAM Policies that are applicable to the affected IAM User(s) or Role(s). Either reduce the '
-            'permissions of the administrative principal(s), or reduce the permissions of the principal(s) that can '
-            'access the administrative principals.'
-        ))
+        result.append(
+            Finding(
+                f"IAM {'Principals' if len(node_path_list) > 1 else 'Principal'} Can Escalate Privileges",
+                'High',
+                'A lower-privilege IAM User or Role is able to gain administrative privileges. This could lead to the '
+                'lower-privilege principal being used to compromise the account and its resources.',
+                description_preamble + description_body,
+                'Review the IAM Policies that are applicable to the affected IAM User(s) or Role(s). Either reduce the '
+                'permissions of the administrative principal(s), or reduce the permissions of the principal(s) that can '
+                'access the administrative principals.',
+            )
+        )
+
 
     return result
 
@@ -139,7 +140,7 @@ def gen_mfa_actions_findings(graph: Graph) -> List[Finding]:
             if _can_call_without_mfa(node, actions):
                 affected_users.append(node)
 
-    if len(affected_users) > 0:
+    if affected_users:
         description_preamble = 'In AWS, IAM Users can be configured to use an MFA device. When an IAM User has MFA ' \
                                'enabled, they are required to provide the second factor of authentication when they ' \
                                'log in to the AWS Console. However, unless there is a specific IAM policy attached ' \
@@ -148,20 +149,21 @@ def gen_mfa_actions_findings(graph: Graph) -> List[Finding]:
                                'access keys, and can call sensitive actions to alter permissions or add users ' \
                                'without using a second factor of authentication:\n\n'
 
-        description_body = ''
-        for node in affected_users:
-            description_body += '* {}\n'.format(node.searchable_name())
+        description_body = ''.join(
+            f'* {node.searchable_name()}\n' for node in affected_users
+        )
 
-        result.append(Finding(
-            'Administrative IAM {} Can Call Sensitive Actions Without MFA'.format(
-                'Users' if len(affected_users) > 1 else 'User'
-            ),
-            'Medium',
-            'An adminstrative IAM User is able to call sensitive actions, such as creating more principals or '
-            'modifying permissions, without using MFA.',
-            description_preamble + description_body,
-            'Implement and attach an IAM Policy to the noted user(s) that rejects requests when MFA is not used.'
-        ))
+        result.append(
+            Finding(
+                f"Administrative IAM {'Users' if len(affected_users) > 1 else 'User'} Can Call Sensitive Actions Without MFA",
+                'Medium',
+                'An adminstrative IAM User is able to call sensitive actions, such as creating more principals or '
+                'modifying permissions, without using MFA.',
+                description_preamble + description_body,
+                'Implement and attach an IAM Policy to the noted user(s) that rejects requests when MFA is not used.',
+            )
+        )
+
 
     return result
 
@@ -183,12 +185,13 @@ def _can_call_without_mfa(node: Node, actions: List[str]) -> bool:
 def gen_overprivileged_instance_profile_findings(graph: Graph) -> List[Finding]:
     """Generates findings related to risk from EC2 instances being loaded with overprivileged instance profiles."""
     result = []
-    affected_roles = []
-    for node in graph.nodes:
-        if ':role/' in node.arn and node.is_admin and len(node.instance_profile) > 0:
-            affected_roles.append(node)
-
-    if len(affected_roles) > 0:
+    if affected_roles := [
+        node
+        for node in graph.nodes
+        if ':role/' in node.arn
+        and node.is_admin
+        and len(node.instance_profile) > 0
+    ]:
         description_preamble = 'In AWS, EC2 instances can be given an instance profile. These instance profiles ' \
                                'are associated with an IAM Role, and grants access to the permissions of the IAM ' \
                                'Role. Because EC2 instances are at a higher risk of exposure and compromise, both ' \
@@ -196,20 +199,21 @@ def gen_overprivileged_instance_profile_findings(graph: Graph) -> List[Finding]:
                                'access to administrative privileges. The following IAM Roles have administrative ' \
                                'permissions and are associated with an instance profile:\n\n'
 
-        description_body = ''
-        for node in affected_roles:
-            description_body += '* {}\n'.format(node.searchable_name())
+        description_body = ''.join(
+            f'* {node.searchable_name()}\n' for node in affected_roles
+        )
 
-        result.append(Finding(
-            'Instance {} Administrator Privileges'.format(
-                'Profiles Have' if len(affected_roles) > 1 else 'Profile Has'
-            ),
-            'High',
-            'If an instance with the noted instance profile(s) is compromised, then the AWS account as a whole is at '
-            'risk of compromise.',
-            description_preamble + description_body,
-            'Reduce the scope of permissions attached to the noted instance profile(s).'
-        ))
+        result.append(
+            Finding(
+                f"Instance {'Profiles Have' if len(affected_roles) > 1 else 'Profile Has'} Administrator Privileges",
+                'High',
+                'If an instance with the noted instance profile(s) is compromised, then the AWS account as a whole is at '
+                'risk of compromise.',
+                description_preamble + description_body,
+                'Reduce the scope of permissions attached to the noted instance profile(s).',
+            )
+        )
+
 
     return result
 
@@ -217,15 +221,21 @@ def gen_overprivileged_instance_profile_findings(graph: Graph) -> List[Finding]:
 def gen_overprivileged_function_findings(graph: Graph) -> List[Finding]:
     """Generates findings related to risk from Lambda functions being loaded with overprivileged roles"""
     result = []
-    affected_roles = []
-    for node in graph.nodes:
-        if ':role/' in node.arn and node.is_admin:
-            if query_interface.resource_policy_authorization('lambda.amazonaws.com', arns.get_account_id(node.arn),
-                                                             node.trust_policy, 'sts:AssumeRole', node.arn, {})\
-                    == query_interface.ResourcePolicyEvalResult.SERVICE_MATCH:
-                affected_roles.append(node)
-
-    if len(affected_roles) > 0:
+    if affected_roles := [
+        node
+        for node in graph.nodes
+        if ':role/' in node.arn
+        and node.is_admin
+        and query_interface.resource_policy_authorization(
+            'lambda.amazonaws.com',
+            arns.get_account_id(node.arn),
+            node.trust_policy,
+            'sts:AssumeRole',
+            node.arn,
+            {},
+        )
+        == query_interface.ResourcePolicyEvalResult.SERVICE_MATCH
+    ]:
         description_preamble = 'In AWS, Lambda functions can be assigned an IAM Role to use during execution. These ' \
                                'IAM Roles give the function access to call the AWS API with the permissions of the ' \
                                'IAM Role, depending on the policies attached to it. If the Lambda function can be ' \
@@ -233,9 +243,9 @@ def gen_overprivileged_function_findings(graph: Graph) -> List[Finding]:
                                'make AWS API calls with the IAM Role\'s permissions. The following IAM Roles have ' \
                                'administrative privileges, and can be passed to Lambda functions:\n\n'
 
-        description_body = ''
-        for node in affected_roles:
-            description_body += '* {}\n'.format(node.searchable_name())
+        description_body = ''.join(
+            f'* {node.searchable_name()}\n' for node in affected_roles
+        )
 
         result.append(Finding(
             'IAM Roles Available to Lambda Functions Have Administrative Privileges' if len(affected_roles) > 1 else
@@ -253,16 +263,21 @@ def gen_overprivileged_function_findings(graph: Graph) -> List[Finding]:
 def gen_overprivileged_stack_findings(graph: Graph) -> List[Finding]:
     """Generates findings related to risk from CloudFormation stacks being loaded with overprivileged roles"""
     result = []
-    affected_roles = []
-    for node in graph.nodes:
-        if ':role/' in node.arn and node.is_admin:
-            if query_interface.resource_policy_authorization('cloudformation.amazonaws.com',
-                                                             arns.get_account_id(node.arn), node.trust_policy,
-                                                             'sts:AssumeRole', node.arn, {}) == \
-                    query_interface.ResourcePolicyEvalResult.SERVICE_MATCH:
-                affected_roles.append(node)
-
-    if len(affected_roles) > 0:
+    if affected_roles := [
+        node
+        for node in graph.nodes
+        if ':role/' in node.arn
+        and node.is_admin
+        and query_interface.resource_policy_authorization(
+            'cloudformation.amazonaws.com',
+            arns.get_account_id(node.arn),
+            node.trust_policy,
+            'sts:AssumeRole',
+            node.arn,
+            {},
+        )
+        == query_interface.ResourcePolicyEvalResult.SERVICE_MATCH
+    ]:
         description_preamble = 'In AWS, CloudFormation stacks can be given an IAM Role. When a stack has an IAM ' \
                                'Role, it can use that IAM Role to make AWS API calls to create the resources ' \
                                'defined in the template for that stack. If the IAM Role has administrator access ' \
@@ -271,9 +286,9 @@ def gen_overprivileged_stack_findings(graph: Graph) -> List[Finding]:
                                'account as a whole. The following IAM Roles can be used in CloudFormation and ' \
                                'have administrative privileges:\n\n'
 
-        description_body = ''
-        for node in affected_roles:
-            description_body += '* {}\n'.format(node.searchable_name())
+        description_body = ''.join(
+            f'* {node.searchable_name()}\n' for node in affected_roles
+        )
 
         result.append(Finding(
             'IAM Roles Available to CloudFormation Stacks Have Administrative Privileges' if len(affected_roles) > 1
@@ -293,15 +308,20 @@ def gen_os_lpe_finding(graph: Graph) -> List[Finding]:
     result = []
     affected_roles = []
     for node in graph.nodes:
-        if ':role/' in node.arn and node.instance_profile is not None and len(node.instance_profile) > 0:
-            # https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-setting-up-messageAPIs.html
-            if query_interface.local_check_authorization(node, 'ssmmessages:*', '*', {}):
-                if query_interface.local_check_authorization(node, 'ssm:SendCommand', '*', {}):
-                    affected_roles.append(node)
-                elif query_interface.local_check_authorization(node, 'ssm:StartSession', '*', {}):
-                    affected_roles.append(node)
+        if (
+            ':role/' in node.arn
+            and node.instance_profile is not None
+            and len(node.instance_profile) > 0
+            and query_interface.local_check_authorization(
+                node, 'ssmmessages:*', '*', {}
+            )
+        ):
+            if query_interface.local_check_authorization(node, 'ssm:SendCommand', '*', {}):
+                affected_roles.append(node)
+            elif query_interface.local_check_authorization(node, 'ssm:StartSession', '*', {}):
+                affected_roles.append(node)
 
-    if len(affected_roles) > 0:
+    if affected_roles:
         description_preamble = 'In AWS EC2, instances can be assigned instance profiles. An instance profile is tied ' \
                                'to a single IAM Role. The instance profile can be used to access the AWS API with ' \
                                'the permissions of the IAM Role. If the IAM Role has permission to call certain SSM ' \
@@ -317,9 +337,9 @@ def gen_os_lpe_finding(graph: Graph) -> List[Finding]:
                                '\n' \
                                '\n'
 
-        description_body = ''
-        for node in affected_roles:
-            description_body += '* {}\n'.format(node.searchable_name())
+        description_body = ''.join(
+            f'* {node.searchable_name()}\n' for node in affected_roles
+        )
 
         result.append(Finding(
             'IAM Roles With Unsafe SSM Permissions' if len(affected_roles) > 1
@@ -341,23 +361,24 @@ def _find_cycle(graph: Graph, origin: Node) -> Optional[List[Node]]:
     current_stack = [origin]
     explored_nodes = []
 
-    while len(current_stack) > 0:
-        outbound_nodes = [x.destination for x in current_root.get_outbound_edges(graph)]
-        if len(outbound_nodes) == 0:
-            current_root = current_stack.pop()
-        else:
+    while current_stack:
+        if outbound_nodes := [
+            x.destination for x in current_root.get_outbound_edges(graph)
+        ]:
             for node in outbound_nodes:
                 if node == origin:
                     return current_stack
-            candidates = [x for x in outbound_nodes if x not in explored_nodes]
-            if len(candidates) == 0:
-                current_root = current_stack.pop()
-                continue
-            else:
+            if candidates := [
+                x for x in outbound_nodes if x not in explored_nodes
+            ]:
                 explored_nodes.append(current_root)
                 current_root = candidates[0]
                 current_stack.append(current_root)
 
+            else:
+                current_root = current_stack.pop()
+        else:
+            current_root = current_stack.pop()
     return None
 
 
@@ -376,7 +397,7 @@ def gen_circular_access_finding(graph: Graph) -> List[Finding]:
         if cycle_result is not None:
             cycles.append(cycle_result)
 
-    if len(cycles) > 0:
+    if cycles:
         description_preamble = 'In AWS, an IAM Principal with a specific set of permissions can gain access ' \
                                'to another principal, such as when an IAM User has permission to call ' \
                                '`sts:AssumeRole` for an IAM Role. Principal Mapper tracks these connections as ' \
@@ -391,9 +412,10 @@ def gen_circular_access_finding(graph: Graph) -> List[Finding]:
                                '\n' \
                                '\n'
 
-        description_body = ''
-        for cycle in cycles:
-            description_body += '* {}\n'.format(' -> '.join([x.searchable_name() for x in cycle] + [cycle[0].searchable_name()]))
+        description_body = ''.join(
+            f"* {' -> '.join([x.searchable_name() for x in cycle] + [cycle[0].searchable_name()])}\n"
+            for cycle in cycles
+        )
 
         result.append(Finding(
             'IAM Principals with Circular Access',
@@ -412,13 +434,13 @@ def gen_admin_users_without_mfa_finding(graph: Graph) -> List[Finding]:
     MFA device configured."""
 
     result = []
-    affected_nodes = []
-
-    for node in graph.nodes:
-        if node.searchable_name().startswith('user/') and node.is_admin and not node.has_mfa:
-            affected_nodes.append(node)
-
-    if len(affected_nodes) > 0:
+    if affected_nodes := [
+        node
+        for node in graph.nodes
+        if node.searchable_name().startswith('user/')
+        and node.is_admin
+        and not node.has_mfa
+    ]:
         description_preamble = 'In AWS, an IAM User can be assigned a device for Multi-Factor Authentication (MFA). ' \
                                'When an IAM User is assigned an MFA device, they are required to provide an extra ' \
                                'factor of authentication when logging in to the AWS Console. It is also possible to ' \
@@ -431,9 +453,7 @@ def gen_admin_users_without_mfa_finding(graph: Graph) -> List[Finding]:
                                '\n' \
                                '\n'
 
-        user_list = []
-        for node in affected_nodes:
-            user_list.append('* {}'.format(node.searchable_name()))
+        user_list = [f'* {node.searchable_name()}' for node in affected_nodes]
         description_body = '\n'.join(user_list)
 
         result.append(Finding(
@@ -467,10 +487,10 @@ def gen_resources_with_potential_confused_deputies(graph: Graph) -> List[Finding
     }
 
     affected_policies = []  # type: List[Tuple[str, str, str]]
-    for resource_type in resource_service_action_map.keys():
+    for resource_type, value in resource_service_action_map.items():
         for policy in graph.policies:
             if arns.get_service(policy.arn) == resource_type:
-                for service, action_list in resource_service_action_map[resource_type].items():
+                for service, action_list in value.items():
                     available_actions = []
                     for action in action_list:
                         rpa_result = resource_policy_authorization(
@@ -485,13 +505,19 @@ def gen_resources_with_potential_confused_deputies(graph: Graph) -> List[Finding
                         )
                         if rpa_result.SERVICE_MATCH:
                             available_actions.append(action)
-                    if len(available_actions) > 0:
+                    if available_actions:
                         affected_policies.append(
                             (policy.arn, service, ' | '.join(available_actions))
                         )
 
-    if len(affected_policies) > 0:
-        desc_list_str = '\n'.join(['* With service {}, the resource {} for the action(s): {}'.format(y, x, z) for x, y, z in affected_policies])
+    if affected_policies:
+        desc_list_str = '\n'.join(
+            [
+                f'* With service {y}, the resource {x} for the action(s): {z}'
+                for x, y, z in affected_policies
+            ]
+        )
+
         result.append(
             Finding(
                 'Resources With A Potential Confused-Deputy Risk',
@@ -523,9 +549,9 @@ def print_report(report: Report) -> None:
     print('----------------------------------------------------------------')
     print('# Principal Mapper Findings')
     print()
-    print('Findings identified in AWS account {}'.format(report.account))
+    print(f'Findings identified in AWS account {report.account}')
     print()
-    print('Date and Time: {}'.format(report.date_and_time.isoformat()))
+    print(f'Date and Time: {report.date_and_time.isoformat()}')
     print()
     print(report.source)
     print()
@@ -537,10 +563,9 @@ def print_report(report: Report) -> None:
     else:
         for finding in report.findings:
             print(
-                "## {}\n\n### Severity\n\n{}\n\n### Impact\n\n{}\n\n### Description\n\n{}\n\n### Recommendation\n\n{}\n\n".format(
-                    finding.title, finding.severity, finding.impact, finding.description,finding.recommendation
-                )
+                f"## {finding.title}\n\n### Severity\n\n{finding.severity}\n\n### Impact\n\n{finding.impact}\n\n### Description\n\n{finding.description}\n\n### Recommendation\n\n{finding.recommendation}\n\n"
             )
+
 
     # Footer
 

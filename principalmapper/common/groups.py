@@ -33,10 +33,7 @@ class Group(object):
             raise ValueError('Group objects must be constructed with a valid ARN for a group')
         self.arn = arn
 
-        if attached_policies is None:
-            self.attached_policies = []
-        else:
-            self.attached_policies = attached_policies
+        self.attached_policies = [] if attached_policies is None else attached_policies
 
     def to_dictionary(self) -> dict:
         """Returns a dictionary representation of this object for storage"""

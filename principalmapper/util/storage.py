@@ -33,7 +33,7 @@ def get_storage_root():
     result = None
     if pmapper_env_var is not None:
         result = pmapper_env_var
-    elif platform == 'win32' or platform == 'cygwin':
+    elif platform in ['win32', 'cygwin']:
         # Windows: file root at %APPDATA%\principalmapper\
         appdatadir = os.getenv('APPDATA')
         if appdatadir is None:

@@ -31,7 +31,7 @@ def handle_request(graph: Graph, path: str, file_format: str, with_services: Opt
     if file_format == 'graphml':
         return graphml_writer.write_standard_graphml(graph, path, with_services)
 
-    elif file_format in ('svg', 'png', 'dot'):
+    elif file_format in {'svg', 'png', 'dot'}:
         return graphviz_writer.write_standard_graphviz(graph, path, file_format, with_services)
 
     else:
@@ -46,7 +46,7 @@ def draw_privesc_paths(graph: Graph, path: str, file_format: str) -> None:
     if file_format == 'graphml':
         return graphml_writer.write_privesc_graphml(graph, path)
 
-    elif file_format in ('svg', 'png', 'dot'):
+    elif file_format in {'svg', 'png', 'dot'}:
         return graphviz_writer.write_privesc_graphviz(graph, path, file_format)
 
     else:

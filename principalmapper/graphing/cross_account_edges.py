@@ -96,15 +96,17 @@ def get_edges_between_graphs(graph_a: Graph, graph_b: Graph, scps_a: Optional[Li
     for node_a in graph_a.nodes:
         for node_b in graph_b.nodes:
             # check a -> b
-            if node_b.searchable_name().startswith('role/'):
-                if _check_assume_role(graph_a, node_a, graph_b, node_b, scps_a):
-                    logger.info('Found edge: {}'.format(_describe_edge(node_a, node_b)))
-                    result.append(Edge(node_a, node_b, 'can call sts:AssumeRole to access', 'STS'))
+            if node_b.searchable_name().startswith(
+                'role/'
+            ) and _check_assume_role(graph_a, node_a, graph_b, node_b, scps_a):
+                logger.info('Found edge: {}'.format(_describe_edge(node_a, node_b)))
+                result.append(Edge(node_a, node_b, 'can call sts:AssumeRole to access', 'STS'))
 
             # check b -> a
-            if node_a.searchable_name().startswith('role/'):
-                if _check_assume_role(graph_b, node_b, graph_a, node_a, scps_b):
-                    logger.info('Found edge: {}'.format(_describe_edge(node_b, node_a)))
-                    result.append(Edge(node_b, node_a, 'can call sts:AssumeRole to access', 'STS'))
+            if node_a.searchable_name().startswith(
+                'role/'
+            ) and _check_assume_role(graph_b, node_b, graph_a, node_a, scps_b):
+                logger.info('Found edge: {}'.format(_describe_edge(node_b, node_a)))
+                result.append(Edge(node_b, node_a, 'can call sts:AssumeRole to access', 'STS'))
 
     return result

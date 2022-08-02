@@ -43,18 +43,15 @@ def print_graph_data(graph: Graph) -> None:
     """Given a Graph object, prints a small amount of information about the Graph. This fulfills
     `pmapper graph display`, and also gets ran after `pmapper graph --create`.
     """
-    print('Graph Data for Account:  {}'.format(graph.metadata['account_id']))
+    print(f"Graph Data for Account:  {graph.metadata['account_id']}")
     if 'org-id' in graph.metadata:
-        print('  Organization: {}'.format(graph.metadata['org-id']))
-        print('  OU Path:      {}'.format(graph.metadata['org-path']))
-    admin_count = 0
-    for node in graph.nodes:
-        if node.is_admin:
-            admin_count += 1
-    print('  # of Nodes:              {} ({} admins)'.format(len(graph.nodes), admin_count))
-    print('  # of Edges:              {}'.format(len(graph.edges)))
-    print('  # of Groups:             {}'.format(len(graph.groups)))
-    print('  # of (tracked) Policies: {}'.format(len(graph.policies)))
+        print(f"  Organization: {graph.metadata['org-id']}")
+        print(f"  OU Path:      {graph.metadata['org-path']}")
+    admin_count = sum(bool(node.is_admin) for node in graph.nodes)
+    print(f'  # of Nodes:              {len(graph.nodes)} ({admin_count} admins)')
+    print(f'  # of Edges:              {len(graph.edges)}')
+    print(f'  # of Groups:             {len(graph.groups)}')
+    print(f'  # of (tracked) Policies: {len(graph.policies)}')
 
 
 def get_graph_from_disk(location: str) -> Graph:
@@ -71,12 +68,15 @@ def get_existing_graph(session: Optional[botocore.session.Session], account: Opt
     standard location.
     """
     if account is not None:
-        logger.debug('Loading graph based on given account id: {}'.format(account))
+        logger.debug(f'Loading graph based on given account id: {account}')
         graph = get_graph_from_disk(get_default_graph_path(account))
     elif session is not None:
         stsclient = session.create_client('sts')
         response = stsclient.get_caller_identity()
-        logger.debug('Loading graph based on sts:GetCallerIdentity result: {}'.format(response['Account']))
+        logger.debug(
+            f"Loading graph based on sts:GetCallerIdentity result: {response['Account']}"
+        )
+
         graph = get_graph_from_disk(os.path.join(get_default_graph_path(response['Account'])))
     else:
         raise ValueError('One of the parameters `account` or `session` must not be None')

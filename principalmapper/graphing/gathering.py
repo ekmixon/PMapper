@@ -63,7 +63,7 @@ def create_graph(session: botocore.session.Session, service_list: list, region_a
     stsclient = session.create_client('sts', **stsargs)
     logger.debug(stsclient.meta.endpoint_url)
     caller_identity = stsclient.get_caller_identity()
-    logger.debug("Caller Identity: {}".format(caller_identity['Arn']))
+    logger.debug(f"Caller Identity: {caller_identity['Arn']}")
     metadata = {
         'account_id': caller_identity['Account'],
         'pmapper_version': principalmapper.__version__
